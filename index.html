@@ -511,6 +511,7 @@ function renderPlanCard(p, pi) {
           <div class="plan-title">${p.title}</div>
           ${p.category ? `<span class="badge badge-blue">${p.category}</span>` : ''}
           ${pct===100 ? `<span class="badge badge-green">Kész</span>` : ''}
+          ${hasLinkedNote('plan',pi) ? `<i class="ti ti-bookmark" style="font-size:13px;color:var(--accent)" title="Van hozzárendelt jegyzet"></i>` : ''}
         </div>
         ${p.description ? `<div class="plan-meta">${p.description}</div>` : ''}
         <div class="progress-wrap">
@@ -549,7 +550,7 @@ function renderTask(t, pi, ti) {
       ${t.done?'<i class="ti ti-check" style="font-size:11px"></i>':''}
     </div>
     <div style="flex:1;min-width:0">
-      <div class="task-text ${t.done?'done':''}">${t.text}</div>
+      <div class="task-text ${t.done?'done':''}">${t.text}${hasLinkedNote('task',pi,ti) ? ` <i class="ti ti-bookmark" style="font-size:12px;color:var(--accent)" title="Van hozzárendelt jegyzet"></i>` : ''}</div>
       ${subs.length ? `<div style="font-size:12px;color:var(--text-muted);margin-top:1px">${sd}/${subs.length} alfeladat</div>` : ''}
       ${subs.length ? `<div class="subtask-list">${subs.map((s,si)=>renderSubtask(s,pi,ti,si)).join('')}</div>` : ''}
       <div class="add-sub-row">
@@ -574,7 +575,7 @@ function renderSubtask(s, pi, ti, si) {
       ${s.done?'<i class="ti ti-check" style="font-size:9px"></i>':''}
     </div>
     <div style="flex:1;min-width:0">
-      <div class="subtask-text ${s.done?'done':''}">${s.text}</div>
+      <div class="subtask-text ${s.done?'done':''}">${s.text}${hasLinkedNote('sub',pi,ti,si) ? ` <i class="ti ti-bookmark" style="font-size:11px;color:var(--accent)" title="Van hozzárendelt jegyzet"></i>` : ''}</div>
       ${noteOpen ? `<textarea class="task-note-area" id="sn-${pi}-${ti}-${si}" placeholder="Alfeladat megjegyzése…" oninput="updateSubtaskNote(${pi},${ti},${si})">${s.note||''}</textarea>` : ''}
     </div>
     <button class="btn-icon" onclick="toggleSubtaskNote(${pi},${ti},${si})" title="Megjegyzés" style="padding:2px;${hasNote?'color:var(--accent)':''}"><i class="ti ti-notes" style="font-size:13px"></i></button>
@@ -598,6 +599,16 @@ function noteLinkLabel(link) {
     if (link.type==='sub') return `${data.plans[link.pi].title} › ${data.plans[link.pi].tasks[link.ti].text} › ${data.plans[link.pi].tasks[link.ti].subtasks[link.si].text}`;
   } catch(e) { return 'Törölt elem'; }
   return null;
+}
+function hasLinkedNote(type, pi, ti, si) {
+  if (!Array.isArray(data.notes)) return false;
+  return data.notes.some(n => {
+    if (!n.link) return false;
+    if (type==='plan') return n.link.type==='plan' && n.link.pi===pi;
+    if (type==='task') return n.link.type==='task' && n.link.pi===pi && n.link.ti===ti;
+    if (type==='sub') return n.link.type==='sub' && n.link.pi===pi && n.link.ti===ti && n.link.si===si;
+    return false;
+  });
 }
 function buildLinkOptions(selected) {
   let opts = `<option value="">Nincs (szabad jegyzet)</option>`;

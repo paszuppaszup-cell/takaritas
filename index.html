@@ -356,8 +356,9 @@ function showPage(page, el, bnavId) {
   document.getElementById('top-bar-title').innerHTML = pageTitles[page];
   // Desktop nav
   document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.remove('active'));
+  const keywords = { dashboard:'irányító', company:'céginform', plans:'tervek', notes:'jegyzetek', software:'szoftver' };
   document.querySelectorAll('.sidebar .nav-item').forEach(n => {
-    if (n.textContent.trim().toLowerCase().includes(page === 'dashboard' ? 'irányító' : page === 'company' ? 'céginform' : page === 'plans' ? 'tervek' : 'jegyzetek')) n.classList.add('active');
+    if (keywords[page] && n.textContent.trim().toLowerCase().includes(keywords[page])) n.classList.add('active');
   });
   // Mobile nav
   document.querySelectorAll('.bottom-nav-item').forEach(n => n.classList.remove('active'));

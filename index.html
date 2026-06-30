@@ -171,6 +171,31 @@ textarea.form-input { min-height: 80px; resize: vertical; }
 @media (min-width: 600px) { .modal-handle { display: none; } }
 .hidden { display: none !important; }
 
+/* User badge & due date */
+.user-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+.user-badge.user-1 { background: #dbeafe; color: #1e40af; }
+.user-badge.user-2 { background: #f3e8ff; color: #6b21a8; }
+.due-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 500; background: var(--surface-2); color: var(--text-muted); }
+.due-badge.overdue { background: #fee2e2; color: #b91c1c; }
+.due-badge.today { background: #fef3c7; color: #92400e; }
+
+/* Calendar */
+.cal-filter { display: flex; gap: 6px; margin-bottom: 0.75rem; flex-wrap: wrap; }
+.cal-filter button { padding: 5px 12px; border: 0.5px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; font-family: inherit; }
+.cal-filter button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cal-group { margin-bottom: 1rem; }
+.cal-group-title { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+.cal-item { display: flex; align-items: flex-start; gap: 8px; padding: 0.65rem 0.85rem; background: var(--surface); border: 0.5px solid var(--border); border-radius: 8px; margin-bottom: 4px; }
+.cal-item-main { flex: 1; min-width: 0; }
+.cal-item-title { font-size: 14px; }
+.cal-item-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* User indicator in sidebar */
+.user-pill { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin: 0.5rem 0; background: var(--surface-2); border-radius: var(--radius); font-size: 13px; }
+.user-pill .user-avatar { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; color: #fff; flex-shrink: 0; }
+.user-avatar.user-1 { background: #2563eb; }
+.user-avatar.user-2 { background: #7c3aed; }
+
 /* Notes */
 .notes-grid { display: grid; gap: 0.75rem; }
 .note-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 6px; }
@@ -235,11 +260,14 @@ textarea.form-input { min-height: 80px; resize: vertical; }
   <button class="nav-item" onclick="showPage('plans',this)"><i class="ti ti-list-check"></i> Tervek és feladatok</button>
   <button class="nav-item" onclick="showPage('notes',this)"><i class="ti ti-notes"></i> Jegyzetek</button>
   <button class="nav-item" onclick="showPage('software',this)"><i class="ti ti-device-desktop"></i> Szoftverek</button>
+  <button class="nav-item" onclick="showPage('calendar',this)"><i class="ti ti-calendar"></i> Naptár</button>
+  <div id="sidebar-user-pill"></div>
 </aside>
 
 <!-- Mobile top bar -->
 <div class="top-bar">
   <div class="top-bar-title" id="top-bar-title"><i class="ti ti-layout-dashboard"></i> Irányítópult</div>
+  <div id="topbar-user-pill" style="margin-left:auto"></div>
 </div>
 
 <!-- Main content -->
@@ -262,6 +290,9 @@ textarea.form-input { min-height: 80px; resize: vertical; }
   <button class="bottom-nav-item" id="bnav-software" onclick="showPage('software',this,'software')">
     <i class="ti ti-device-desktop"></i><span>Szoftverek</span>
   </button>
+  <button class="bottom-nav-item" id="bnav-calendar" onclick="showPage('calendar',this,'calendar')">
+    <i class="ti ti-calendar"></i><span>Naptár</span>
+  </button>
 </nav>
 
 <!-- Modal -->
@@ -282,14 +313,32 @@ const SUPABASE_URL = 'https://xausvinlfcdcgkkjjlox.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdXN2aW5sZmNkY2dra2pqbG94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MjUzODgsImV4cCI6MjA5ODQwMTM4OH0.Qgf7X662VSnM-iCw6F3jPyRo4xZmodVT_dTpqITx-PE';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const USERS = [
+  { id: 'user1', name: 'Admin', color: 'user-1', initial: 'A' },
+  { id: 'user2', name: 'Felhasználó 2', color: 'user-2', initial: 'F' }
+];
+const USER2_PASSWORD = '11111111';
+function getCurrentUser() {
+  const id = sessionStorage.getItem('currentUser') || 'user1';
+  return USERS.find(u => u.id === id) || USERS[0];
+}
+function getUserById(id) { return USERS.find(u => u.id === id) || null; }
+
 async function doLogin() {
   const val = document.getElementById('login-input').value;
   const btn = document.querySelector('.login-btn');
   btn.textContent = '...'; btn.disabled = true;
-  const { data: row } = await sb.from('settings').select('value').eq('key','password').single();
+  let loggedAs = null;
+  if (val === USER2_PASSWORD) {
+    loggedAs = 'user2';
+  } else {
+    const { data: row } = await sb.from('settings').select('value').eq('key','password').single();
+    if (row && val === row.value) loggedAs = 'user1';
+  }
   btn.textContent = 'Belépés'; btn.disabled = false;
-  if (row && val === row.value) {
+  if (loggedAs) {
     sessionStorage.setItem('auth', '1');
+    sessionStorage.setItem('currentUser', loggedAs);
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('login-input').value = '';
     loadData();
@@ -300,6 +349,11 @@ async function doLogin() {
     document.getElementById('login-input').focus();
     setTimeout(() => err.textContent = '', 2500);
   }
+}
+function doLogout() {
+  sessionStorage.removeItem('auth');
+  sessionStorage.removeItem('currentUser');
+  location.reload();
 }
 if (sessionStorage.getItem('auth') !== '1') {
   setTimeout(() => document.getElementById('login-input').focus(), 100);
@@ -359,7 +413,8 @@ const pageTitles = {
   company:   '<i class="ti ti-info-circle"></i> Céginformáció',
   plans:     '<i class="ti ti-list-check"></i> Tervek',
   notes:     '<i class="ti ti-notes"></i> Jegyzetek',
-  software:  '<i class="ti ti-device-desktop"></i> Szoftverek'
+  software:  '<i class="ti ti-device-desktop"></i> Szoftverek',
+  calendar:  '<i class="ti ti-calendar"></i> Naptár'
 };
 
 function showPage(page, el, bnavId) {
@@ -367,7 +422,7 @@ function showPage(page, el, bnavId) {
   document.getElementById('top-bar-title').innerHTML = pageTitles[page];
   // Desktop nav
   document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.remove('active'));
-  const keywords = { dashboard:'irányító', company:'céginform', plans:'tervek', notes:'jegyzetek', software:'szoftver' };
+  const keywords = { dashboard:'irányító', company:'céginform', plans:'tervek', notes:'jegyzetek', software:'szoftver', calendar:'naptár' };
   document.querySelectorAll('.sidebar .nav-item').forEach(n => {
     if (keywords[page] && n.textContent.trim().toLowerCase().includes(keywords[page])) n.classList.add('active');
   });
@@ -386,6 +441,26 @@ function render() {
   else if (currentPage === 'plans') main.innerHTML = renderPlans();
   else if (currentPage === 'notes') main.innerHTML = renderNotes();
   else if (currentPage === 'software') main.innerHTML = renderSoftware();
+  else if (currentPage === 'calendar') main.innerHTML = renderCalendar();
+  renderUserPill();
+}
+function renderUserPill() {
+  const u = getCurrentUser();
+  const sidebar = document.getElementById('sidebar-user-pill');
+  if (sidebar) {
+    sidebar.innerHTML = `<div class="user-pill">
+      <div class="user-avatar ${u.color}">${u.initial}</div>
+      <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.name}</div>
+      <button class="btn-icon" onclick="doLogout()" title="Kilépés"><i class="ti ti-logout" style="font-size:15px"></i></button>
+    </div>`;
+  }
+  const topbar = document.getElementById('topbar-user-pill');
+  if (topbar) {
+    topbar.innerHTML = `<div style="display:flex;align-items:center;gap:6px">
+      <div class="user-avatar ${u.color}" style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:12px">${u.initial}</div>
+      <button class="btn-icon" onclick="doLogout()" title="Kilépés"><i class="ti ti-logout" style="font-size:16px"></i></button>
+    </div>`;
+  }
 }
 
 /* ── Dashboard ── */
@@ -545,12 +620,18 @@ function renderTask(t, pi, ti) {
   const noteKey = `${pi}-${ti}`;
   const noteOpen = !!expandedTaskNotes[noteKey];
   const hasNote = !!(t.note && t.note.trim());
+  const assignee = t.assignedTo ? getUserById(t.assignedTo) : null;
+  const dueInfo = formatDueDate(t.dueDate);
   return `<div class="task-item">
     <div class="task-check ${t.done?'done':''}" onclick="toggleTask(${pi},${ti})">
       ${t.done?'<i class="ti ti-check" style="font-size:11px"></i>':''}
     </div>
     <div style="flex:1;min-width:0">
       <div class="task-text ${t.done?'done':''}">${t.text}${hasLinkedNote('task',pi,ti) ? ` <i class="ti ti-bookmark" style="font-size:12px;color:var(--accent)" title="Van hozzárendelt jegyzet"></i>` : ''}</div>
+      ${(assignee || dueInfo) ? `<div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap">
+        ${assignee ? `<span class="user-badge ${assignee.color}"><i class="ti ti-user" style="font-size:11px"></i> ${assignee.name}</span>` : ''}
+        ${dueInfo ? `<span class="due-badge ${dueInfo.cls}"><i class="ti ti-calendar" style="font-size:11px"></i> ${dueInfo.label}</span>` : ''}
+      </div>` : ''}
       ${subs.length ? `<div style="font-size:12px;color:var(--text-muted);margin-top:1px">${sd}/${subs.length} alfeladat</div>` : ''}
       ${subs.length ? `<div class="subtask-list">${subs.map((s,si)=>renderSubtask(s,pi,ti,si)).join('')}</div>` : ''}
       <div class="add-sub-row">
@@ -560,6 +641,7 @@ function renderTask(t, pi, ti) {
       ${noteOpen ? `<textarea class="task-note-area" id="tn-${pi}-${ti}" placeholder="Feladat megjegyzése…" oninput="updateTaskNote(${pi},${ti})">${t.note||''}</textarea>` : ''}
     </div>
     <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;align-items:center">
+      <button class="btn-icon" onclick="editTask(${pi},${ti})" title="Szerkesztés"><i class="ti ti-edit" style="font-size:15px"></i></button>
       <button class="btn-icon" onclick="toggleTaskNote(${pi},${ti})" title="Megjegyzés" style="${hasNote?'color:var(--accent)':''}"><i class="ti ti-notes" style="font-size:15px"></i></button>
       <button class="btn-icon" onclick="deleteTask(${pi},${ti})"><i class="ti ti-trash" style="font-size:15px;color:var(--danger)"></i></button>
     </div>
@@ -700,8 +782,43 @@ function updateSubtaskNote(pi,ti,si) { const el=document.getElementById(`sn-${pi
 function addTask(pi) {
   const inp=document.getElementById(`nt-${pi}`), text=inp.value.trim();
   if(!text)return;
-  data.plans[pi].tasks.push({text,done:false,subtasks:[]});
+  data.plans[pi].tasks.push({text,done:false,subtasks:[],assignedTo:getCurrentUser().id,dueDate:null});
   save(); expandedPlans[pi]=true; render();
+}
+function editTask(pi, ti) {
+  const t = data.plans[pi].tasks[ti];
+  const userOpts = [`<option value="">Nincs hozzárendelve</option>`].concat(
+    USERS.map(u => `<option value="${u.id}" ${t.assignedTo===u.id?'selected':''}>${u.name}</option>`)
+  ).join('');
+  openModal('Feladat szerkesztése', `
+    <div class="form-group"><label class="form-label">Feladat szövege</label><input class="form-input" id="f-ttext" value="${(t.text||'').replace(/"/g,'&quot;')}"></div>
+    <div class="form-group"><label class="form-label">Hozzárendelve</label><select class="form-input" id="f-tuser">${userOpts}</select></div>
+    <div class="form-group"><label class="form-label">Határidő</label><input class="form-input" type="datetime-local" id="f-tdue" value="${t.dueDate||''}"></div>
+  `, () => {
+    const text = g('f-ttext'); if(!text) return alert('A feladat szövege kötelező!');
+    data.plans[pi].tasks[ti].text = text;
+    data.plans[pi].tasks[ti].assignedTo = document.getElementById('f-tuser').value || null;
+    data.plans[pi].tasks[ti].dueDate = document.getElementById('f-tdue').value || null;
+    save(); render();
+  });
+}
+function formatDueDate(d) {
+  if (!d) return null;
+  const due = new Date(d);
+  if (isNaN(due)) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const diffDays = Math.round((dueDay - today) / 86400000);
+  const hasTime = d.length > 10;
+  const timeStr = hasTime ? ` ${String(due.getHours()).padStart(2,'0')}:${String(due.getMinutes()).padStart(2,'0')}` : '';
+  let label, cls = '';
+  if (diffDays < 0) { label = `Lejárt (${due.getFullYear()}.${String(due.getMonth()+1).padStart(2,'0')}.${String(due.getDate()).padStart(2,'0')}${timeStr})`; cls = 'overdue'; }
+  else if (diffDays === 0) { label = `Ma${timeStr}`; cls = 'today'; }
+  else if (diffDays === 1) { label = `Holnap${timeStr}`; }
+  else if (diffDays < 7) { label = `${diffDays} nap múlva${timeStr}`; }
+  else { label = `${due.getFullYear()}.${String(due.getMonth()+1).padStart(2,'0')}.${String(due.getDate()).padStart(2,'0')}${timeStr}`; }
+  return { label, cls };
 }
 function addSubtask(pi,ti) {
   const inp=document.getElementById(`ns-${pi}-${ti}`), text=inp.value.trim();
@@ -740,6 +857,79 @@ function editPlan(pi) {
 }
 
 /* ── Software ── */
+/* ── Calendar ── */
+let calendarFilter = 'all';
+function setCalendarFilter(f) { calendarFilter = f; render(); }
+function renderCalendar() {
+  const items = [];
+  (data.plans||[]).forEach((p, pi) => {
+    (p.tasks||[]).forEach((t, ti) => {
+      if (!t.dueDate) return;
+      if (calendarFilter !== 'all' && t.assignedTo !== calendarFilter) return;
+      items.push({ plan: p.title, text: t.text, due: t.dueDate, assignedTo: t.assignedTo, done: t.done, pi, ti });
+    });
+  });
+  items.sort((a,b) => new Date(a.due) - new Date(b.due));
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const groups = { overdue:[], today:[], tomorrow:[], week:[], later:[] };
+  items.forEach(it => {
+    const d = new Date(it.due);
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diff = Math.round((day - today) / 86400000);
+    if (it.done) groups.later.push(it);
+    else if (diff < 0) groups.overdue.push(it);
+    else if (diff === 0) groups.today.push(it);
+    else if (diff === 1) groups.tomorrow.push(it);
+    else if (diff < 7) groups.week.push(it);
+    else groups.later.push(it);
+  });
+
+  const groupLabels = {
+    overdue: { title: 'Lejárt', icon: 'alert-triangle' },
+    today:   { title: 'Mai', icon: 'calendar-event' },
+    tomorrow:{ title: 'Holnapi', icon: 'calendar' },
+    week:    { title: 'Ezen a héten', icon: 'calendar-week' },
+    later:   { title: 'Később', icon: 'calendar-time' }
+  };
+
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Naptár</div></div>
+  </div>
+  <div class="cal-filter">
+    <button class="${calendarFilter==='all'?'active':''}" onclick="setCalendarFilter('all')">Mindenki</button>
+    ${USERS.map(u => `<button class="${calendarFilter===u.id?'active':''}" onclick="setCalendarFilter('${u.id}')">${u.name}</button>`).join('')}
+  </div>
+  ${items.length === 0
+    ? `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Nincs ütemezett feladat${calendarFilter!=='all'?' ennek a felhasználónak':''}.</div>`
+    : Object.keys(groupLabels).map(k => {
+        const g = groups[k];
+        if (!g.length) return '';
+        const lbl = groupLabels[k];
+        return `<div class="cal-group">
+          <div class="cal-group-title"><i class="ti ti-${lbl.icon}"></i> ${lbl.title} (${g.length})</div>
+          ${g.map(it => {
+            const u = it.assignedTo ? getUserById(it.assignedTo) : null;
+            const due = formatDueDate(it.due);
+            return `<div class="cal-item">
+              <div style="margin-top:2px">${it.done ? '<i class="ti ti-check" style="color:var(--success);font-size:16px"></i>' : '<i class="ti ti-circle" style="color:var(--text-muted);font-size:16px"></i>'}</div>
+              <div class="cal-item-main">
+                <div class="cal-item-title ${it.done?'done':''}" style="${it.done?'text-decoration:line-through;color:var(--text-muted)':''}">${it.text}</div>
+                <div class="cal-item-meta">
+                  <span><i class="ti ti-list-check" style="font-size:11px"></i> ${it.plan}</span>
+                  ${due ? `<span class="due-badge ${due.cls}"><i class="ti ti-clock" style="font-size:11px"></i> ${due.label}</span>` : ''}
+                  ${u ? `<span class="user-badge ${u.color}"><i class="ti ti-user" style="font-size:11px"></i> ${u.name}</span>` : ''}
+                </div>
+              </div>
+              <button class="btn-icon" onclick="showPage('plans',null,'plans');setTimeout(()=>{expandedPlans[${it.pi}]=true;render();},10)" title="Megnyitás"><i class="ti ti-external-link" style="font-size:15px"></i></button>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('')}`;
+}
+
 function renderSoftware() {
   const sw = data.software || [];
   const havali = sw.filter(s => s.cycle === 'havi');

@@ -346,6 +346,7 @@ let currentPage = 'dashboard';
 let expandedPlans = {};
 let expandedTaskNotes = {};
 let expandedPlanNotes = {};
+let expandedSubtaskNotes = {};
 
 const pageTitles = {
   dashboard: '<i class="ti ti-layout-dashboard"></i> Irányítópult',
@@ -559,11 +560,18 @@ function renderTask(t, pi, ti) {
 }
 
 function renderSubtask(s, pi, ti, si) {
-  return `<div class="subtask-item">
-    <div class="subtask-check ${s.done?'done':''}" onclick="toggleSubtask(${pi},${ti},${si})">
+  const noteKey = `${pi}-${ti}-${si}`;
+  const noteOpen = !!expandedSubtaskNotes[noteKey];
+  const hasNote = !!(s.note && s.note.trim());
+  return `<div class="subtask-item" style="align-items:flex-start">
+    <div class="subtask-check ${s.done?'done':''}" onclick="toggleSubtask(${pi},${ti},${si})" style="margin-top:2px">
       ${s.done?'<i class="ti ti-check" style="font-size:9px"></i>':''}
     </div>
-    <div class="subtask-text ${s.done?'done':''}" style="flex:1">${s.text}</div>
+    <div style="flex:1;min-width:0">
+      <div class="subtask-text ${s.done?'done':''}">${s.text}</div>
+      ${noteOpen ? `<textarea class="task-note-area" id="sn-${pi}-${ti}-${si}" placeholder="Alfeladat megjegyzése…" oninput="updateSubtaskNote(${pi},${ti},${si})">${s.note||''}</textarea>` : ''}
+    </div>
+    <button class="btn-icon" onclick="toggleSubtaskNote(${pi},${ti},${si})" title="Megjegyzés" style="padding:2px;${hasNote?'color:var(--accent)':''}"><i class="ti ti-notes" style="font-size:13px"></i></button>
     <button class="btn-icon" onclick="deleteSubtask(${pi},${ti},${si})" style="padding:2px"><i class="ti ti-x" style="font-size:13px;color:var(--danger)"></i></button>
   </div>`;
 }
@@ -595,6 +603,8 @@ function toggleTaskNote(pi,ti) { const k=`${pi}-${ti}`; expandedTaskNotes[k]=!ex
 function updateTaskNote(pi,ti) { const el=document.getElementById(`tn-${pi}-${ti}`); if(el){ data.plans[pi].tasks[ti].note=el.value; save(); } }
 function togglePlanNote(pi) { expandedPlanNotes[pi]=!expandedPlanNotes[pi]; if(expandedPlanNotes[pi]) expandedPlans[pi]=true; render(); }
 function updatePlanNote(pi) { const el=document.getElementById(`pn-${pi}`); if(el){ data.plans[pi].note=el.value; save(); } }
+function toggleSubtaskNote(pi,ti,si) { const k=`${pi}-${ti}-${si}`; expandedSubtaskNotes[k]=!expandedSubtaskNotes[k]; render(); }
+function updateSubtaskNote(pi,ti,si) { const el=document.getElementById(`sn-${pi}-${ti}-${si}`); if(el){ data.plans[pi].tasks[ti].subtasks[si].note=el.value; save(); } }
 function addTask(pi) {
   const inp=document.getElementById(`nt-${pi}`), text=inp.value.trim();
   if(!text)return;

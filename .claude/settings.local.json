@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh repo *)",
+      "PowerShell(gh repo create takaritas --public --description \"Takaritas projekt\" 2>&1)",
+      "PowerShell(gh auth status 2>&1)"
+    ]
+  }
+}

@@ -172,8 +172,12 @@ textarea.form-input { min-height: 80px; resize: vertical; }
 .hidden { display: none !important; }
 
 /* Notes */
-#notes-area { width: 100%; min-height: 400px; padding: 1rem; border: none; border-radius: 12px; font-size: 14px; font-family: inherit; background: var(--surface); color: var(--text); line-height: 1.7; resize: vertical; }
-#notes-area:focus { outline: none; }
+.notes-grid { display: grid; gap: 0.75rem; }
+.note-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 6px; }
+.note-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.note-card-title { font-size: 15px; font-weight: 500; flex: 1; min-width: 0; }
+.note-card-link { font-size: 12px; color: var(--accent-text); background: var(--accent-bg); border-radius: 4px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; }
+.note-card-content { font-size: 14px; color: var(--text-muted); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 .task-note-area { width: 100%; min-height: 60px; margin-top: 6px; padding: 0.45rem 0.65rem; border: 0.5px solid var(--border); border-radius: var(--radius); font-size: 13px; font-family: inherit; background: var(--bg); color: var(--text); line-height: 1.6; resize: vertical; }
 .task-note-area:focus { outline: none; border-color: var(--accent); }
 
@@ -312,7 +316,8 @@ async function loadData() {
     data = rows.data;
     if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
     if (!data.plans) data.plans = [];
-    if (!data.notes) data.notes = '';
+    if (typeof data.notes === 'string') data.notes = data.notes.trim() ? [{ id:'1', title:'Általános', content: data.notes, link: null }] : [];
+    if (!Array.isArray(data.notes)) data.notes = [];
     if (!data.software) data.software = [];
   }
   render();
@@ -335,7 +340,8 @@ function startRealtimeSync() {
       data = incoming;
       if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
       if (!data.plans) data.plans = [];
-      if (!data.notes) data.notes = '';
+      if (typeof data.notes === 'string') data.notes = data.notes.trim() ? [{ id:'1', title:'Általános', content: data.notes, link: null }] : [];
+      if (!Array.isArray(data.notes)) data.notes = [];
       if (!data.software) data.software = [];
       render();
     })
@@ -577,22 +583,97 @@ function renderSubtask(s, pi, ti, si) {
 }
 
 /* ── Notes ── */
+function noteLinkValue(link) {
+  if (!link) return '';
+  if (link.type==='plan') return `plan:${link.pi}`;
+  if (link.type==='task') return `task:${link.pi}:${link.ti}`;
+  if (link.type==='sub') return `sub:${link.pi}:${link.ti}:${link.si}`;
+  return '';
+}
+function noteLinkLabel(link) {
+  if (!link) return null;
+  try {
+    if (link.type==='plan') return data.plans[link.pi].title;
+    if (link.type==='task') return `${data.plans[link.pi].title} › ${data.plans[link.pi].tasks[link.ti].text}`;
+    if (link.type==='sub') return `${data.plans[link.pi].title} › ${data.plans[link.pi].tasks[link.ti].text} › ${data.plans[link.pi].tasks[link.ti].subtasks[link.si].text}`;
+  } catch(e) { return 'Törölt elem'; }
+  return null;
+}
+function buildLinkOptions(selected) {
+  let opts = `<option value="">Nincs (szabad jegyzet)</option>`;
+  (data.plans||[]).forEach((p, pi) => {
+    opts += `<option value="plan:${pi}" ${selected===`plan:${pi}`?'selected':''}>${p.title} [terv]</option>`;
+    (p.tasks||[]).forEach((t, ti) => {
+      opts += `<option value="task:${pi}:${ti}" ${selected===`task:${pi}:${ti}`?'selected':''}>  ${p.title} › ${t.text} [feladat]</option>`;
+      (t.subtasks||[]).forEach((s, si) => {
+        opts += `<option value="sub:${pi}:${ti}:${si}" ${selected===`sub:${pi}:${ti}:${si}`?'selected':''}>    ${p.title} › ${t.text} › ${s.text} [alfeladat]</option>`;
+      });
+    });
+  });
+  return opts;
+}
+function parseNoteLink(val) {
+  if (!val) return null;
+  const p = val.split(':');
+  if (p[0]==='plan') return { type:'plan', pi:+p[1] };
+  if (p[0]==='task') return { type:'task', pi:+p[1], ti:+p[2] };
+  if (p[0]==='sub') return { type:'sub', pi:+p[1], ti:+p[2], si:+p[3] };
+  return null;
+}
 function renderNotes() {
+  const notes = Array.isArray(data.notes) ? data.notes : [];
   return `
   <div class="page-header">
     <div><div class="page-title">Jegyzetek</div></div>
-    <button class="btn btn-primary btn-sm" onclick="saveNotes()"><i class="ti ti-device-floppy"></i> Mentés</button>
+    <button class="btn btn-primary btn-sm" onclick="addNote()"><i class="ti ti-plus"></i> Új jegyzet</button>
   </div>
-  <div class="card" style="padding:0;overflow:hidden">
-    <textarea id="notes-area" placeholder="Ide írd a céggel kapcsolatos gondolataidat…">${data.notes||''}</textarea>
+  <div class="notes-grid">
+    ${notes.length === 0
+      ? `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Még nincsenek jegyzetek. Kattints az „Új jegyzet" gombra!</div>`
+      : notes.map((n,i) => {
+          const lbl = noteLinkLabel(n.link);
+          return `<div class="note-card">
+            <div class="note-card-header">
+              <div class="note-card-title">${n.title||'Cím nélkül'}</div>
+              <div style="display:flex;gap:2px;flex-shrink:0">
+                <button class="btn-icon" onclick="editNote(${i})"><i class="ti ti-edit" style="font-size:15px"></i></button>
+                <button class="btn-icon" onclick="deleteNote(${i})" style="color:var(--danger)"><i class="ti ti-trash" style="font-size:15px"></i></button>
+              </div>
+            </div>
+            ${lbl ? `<div class="note-card-link"><i class="ti ti-link" style="font-size:11px"></i> ${lbl}</div>` : ''}
+            ${n.content ? `<div class="note-card-content">${n.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>` : ''}
+          </div>`;
+        }).join('')}
   </div>`;
 }
-function saveNotes() {
-  data.notes = document.getElementById('notes-area').value;
-  save();
-  const btn = event.currentTarget;
-  btn.innerHTML = '<i class="ti ti-check"></i> Elmentve';
-  setTimeout(()=>{ btn.innerHTML='<i class="ti ti-device-floppy"></i> Mentés'; },1500);
+function openNoteModal(title, note, cb) {
+  openModal(title, `
+    <div class="form-group"><label class="form-label">Cím</label><input class="form-input" id="f-ntitle" value="${(note.title||'').replace(/"/g,'&quot;')}" placeholder="Rövid cím…"></div>
+    <div class="form-group"><label class="form-label">Tartalom</label><textarea class="form-input" id="f-ncontent" style="min-height:120px">${note.content||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Hozzákapcsolt elem (opcionális)</label><select class="form-input" id="f-nlink">${buildLinkOptions(noteLinkValue(note.link))}</select></div>
+  `, () => {
+    cb({
+      title: g('f-ntitle'),
+      content: document.getElementById('f-ncontent')?.value || '',
+      link: parseNoteLink(document.getElementById('f-nlink')?.value || '')
+    });
+  });
+}
+function addNote() {
+  openNoteModal('Új jegyzet', { title:'', content:'', link:null }, note => {
+    if (!Array.isArray(data.notes)) data.notes = [];
+    data.notes.push({ id: Date.now().toString(), ...note });
+    save(); render();
+  });
+}
+function editNote(i) {
+  openNoteModal('Jegyzet szerkesztése', data.notes[i], note => {
+    data.notes[i] = { ...data.notes[i], ...note };
+    save(); render();
+  });
+}
+function deleteNote(i) {
+  if (confirm('Biztosan törlöd ezt a jegyzetet?')) { data.notes.splice(i,1); save(); render(); }
 }
 
 /* ── Actions ── */

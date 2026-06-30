@@ -298,10 +298,10 @@ if (sessionStorage.getItem('auth') !== '1') {
 }
 
 let data = { company:{ name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' }, plans:[], notes:'' };
-let saving = false;
+let saveTimer = null;
 
 async function loadData() {
-  const { data: rows } = await sb.from('app_data').select('data').eq('id','main').single();
+  const { data: rows, error } = await sb.from('app_data').select('data').eq('id','main').single();
   if (rows?.data && Object.keys(rows.data).length > 0) {
     data = rows.data;
     if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
@@ -309,27 +309,30 @@ async function loadData() {
     if (!data.notes) data.notes = '';
   }
   render();
+  startRealtimeSync();
 }
 
-async function save() {
-  if (saving) return;
-  saving = true;
-  await sb.from('app_data').upsert({ id:'main', data, updated_at: new Date().toISOString() });
-  saving = false;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    await sb.from('app_data').upsert({ id:'main', data: JSON.parse(JSON.stringify(data)), updated_at: new Date().toISOString() });
+  }, 400);
 }
 
-sb.channel('app_data_changes')
-  .on('postgres_changes', { event:'UPDATE', schema:'public', table:'app_data', filter:'id=eq.main' }, payload => {
-    const incoming = payload.new.data;
-    if (JSON.stringify(incoming) !== JSON.stringify(data)) {
+function startRealtimeSync() {
+  sb.channel('realtime:app_data')
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'app_data' }, payload => {
+      const incoming = payload.new?.data;
+      if (!incoming) return;
+      if (JSON.stringify(incoming) === JSON.stringify(data)) return;
       data = incoming;
       if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
       if (!data.plans) data.plans = [];
       if (!data.notes) data.notes = '';
       render();
-    }
-  })
-  .subscribe();
+    })
+    .subscribe();
+}
 
 let currentPage = 'dashboard';
 let expandedPlans = {};

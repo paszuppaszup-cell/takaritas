@@ -272,10 +272,13 @@ const SUPABASE_URL = 'https://xausvinlfcdcgkkjjlox.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdXN2aW5sZmNkY2dra2pqbG94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MjUzODgsImV4cCI6MjA5ODQwMTM4OH0.Qgf7X662VSnM-iCw6F3jPyRo4xZmodVT_dTpqITx-PE';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const PWD = '00000000';
-function doLogin() {
+async function doLogin() {
   const val = document.getElementById('login-input').value;
-  if (val === PWD) {
+  const btn = document.querySelector('.login-btn');
+  btn.textContent = '...'; btn.disabled = true;
+  const { data: row } = await sb.from('settings').select('value').eq('key','password').single();
+  btn.textContent = 'Belépés'; btn.disabled = false;
+  if (row && val === row.value) {
     sessionStorage.setItem('auth', '1');
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('login-input').value = '';

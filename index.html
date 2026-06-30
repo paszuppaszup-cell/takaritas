@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cégvezető</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -267,6 +268,10 @@ textarea.form-input { min-height: 80px; resize: vertical; }
 </div>
 
 <script>
+const SUPABASE_URL = 'https://xausvinlfcdcgkkjjlox.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdXN2aW5sZmNkY2dra2pqbG94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MjUzODgsImV4cCI6MjA5ODQwMTM4OH0.Qgf7X662VSnM-iCw6F3jPyRo4xZmodVT_dTpqITx-PE';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const PWD = '00000000';
 function doLogin() {
   const val = document.getElementById('login-input').value;
@@ -274,6 +279,7 @@ function doLogin() {
     sessionStorage.setItem('auth', '1');
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('login-input').value = '';
+    loadData();
   } else {
     const err = document.getElementById('login-error');
     err.textContent = 'Hibás jelszó, próbáld újra.';
@@ -288,11 +294,39 @@ if (sessionStorage.getItem('auth') !== '1') {
   document.getElementById('login-screen').style.display = 'none';
 }
 
-let data = JSON.parse(localStorage.getItem('cegvezeto') || '{}');
-if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
-if (!data.plans) data.plans = [];
-if (!data.notes) data.notes = '';
-function save() { localStorage.setItem('cegvezeto', JSON.stringify(data)); }
+let data = { company:{ name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' }, plans:[], notes:'' };
+let saving = false;
+
+async function loadData() {
+  const { data: rows } = await sb.from('app_data').select('data').eq('id','main').single();
+  if (rows?.data && Object.keys(rows.data).length > 0) {
+    data = rows.data;
+    if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
+    if (!data.plans) data.plans = [];
+    if (!data.notes) data.notes = '';
+  }
+  render();
+}
+
+async function save() {
+  if (saving) return;
+  saving = true;
+  await sb.from('app_data').upsert({ id:'main', data, updated_at: new Date().toISOString() });
+  saving = false;
+}
+
+sb.channel('app_data_changes')
+  .on('postgres_changes', { event:'UPDATE', schema:'public', table:'app_data', filter:'id=eq.main' }, payload => {
+    const incoming = payload.new.data;
+    if (JSON.stringify(incoming) !== JSON.stringify(data)) {
+      data = incoming;
+      if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
+      if (!data.plans) data.plans = [];
+      if (!data.notes) data.notes = '';
+      render();
+    }
+  })
+  .subscribe();
 
 let currentPage = 'dashboard';
 let expandedPlans = {};
@@ -578,7 +612,7 @@ function closeModal() { document.getElementById('modal-overlay').classList.add('
 function overlayClick(e) { if(e.target===e.currentTarget) closeModal(); }
 function g(id) { return (document.getElementById(id)?.value||'').trim(); }
 
-render();
+if (sessionStorage.getItem('auth') === '1') loadData(); else render();
 </script>
 </body>
 </html>

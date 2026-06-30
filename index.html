@@ -228,6 +228,7 @@ textarea.form-input { min-height: 80px; resize: vertical; }
   <span class="nav-section">Tervezés</span>
   <button class="nav-item" onclick="showPage('plans',this)"><i class="ti ti-list-check"></i> Tervek és feladatok</button>
   <button class="nav-item" onclick="showPage('notes',this)"><i class="ti ti-notes"></i> Jegyzetek</button>
+  <button class="nav-item" onclick="showPage('software',this)"><i class="ti ti-device-desktop"></i> Szoftverek</button>
 </aside>
 
 <!-- Mobile top bar -->
@@ -251,6 +252,9 @@ textarea.form-input { min-height: 80px; resize: vertical; }
   </button>
   <button class="bottom-nav-item" id="bnav-notes" onclick="showPage('notes',this,'notes')">
     <i class="ti ti-notes"></i><span>Jegyzetek</span>
+  </button>
+  <button class="bottom-nav-item" id="bnav-software" onclick="showPage('software',this,'software')">
+    <i class="ti ti-device-desktop"></i><span>Szoftverek</span>
   </button>
 </nav>
 
@@ -297,7 +301,7 @@ if (sessionStorage.getItem('auth') !== '1') {
   document.getElementById('login-screen').style.display = 'none';
 }
 
-let data = { company:{ name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' }, plans:[], notes:'' };
+let data = { company:{ name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' }, plans:[], notes:'', software:[] };
 let saveTimer = null;
 
 async function loadData() {
@@ -307,6 +311,7 @@ async function loadData() {
     if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
     if (!data.plans) data.plans = [];
     if (!data.notes) data.notes = '';
+    if (!data.software) data.software = [];
   }
   render();
   startRealtimeSync();
@@ -329,6 +334,7 @@ function startRealtimeSync() {
       if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
       if (!data.plans) data.plans = [];
       if (!data.notes) data.notes = '';
+      if (!data.software) data.software = [];
       render();
     })
     .subscribe();
@@ -366,6 +372,7 @@ function render() {
   else if (currentPage === 'company') main.innerHTML = renderCompany();
   else if (currentPage === 'plans') main.innerHTML = renderPlans();
   else if (currentPage === 'notes') main.innerHTML = renderNotes();
+  else if (currentPage === 'software') main.innerHTML = renderSoftware();
 }
 
 /* ── Dashboard ── */
@@ -375,6 +382,8 @@ function renderDashboard() {
   const totalSub   = data.plans.reduce((s,p) => s + p.tasks.reduce((ss,t) => ss+(t.subtasks||[]).length,0), 0);
   const activePlans = data.plans.filter(p => !p.done).length;
   const pct = totalTasks ? Math.round(doneTasks/totalTasks*100) : 0;
+  const sw = data.software || [];
+  const haviSw = sw.filter(s=>s.active).reduce((s,x)=> s + (x.cycle==='havi' ? Number(x.cost||0) : Math.round(Number(x.cost||0)/12)), 0);
   return `
   <div class="page-header">
     <div>
@@ -387,6 +396,7 @@ function renderDashboard() {
     <div class="stat-card"><div class="stat-label">Összes feladat</div><div class="stat-value">${totalTasks}</div></div>
     <div class="stat-card"><div class="stat-label"><span style="color:var(--success)">Kész</span> feladat</div><div class="stat-value" style="color:var(--success)">${doneTasks}</div></div>
     <div class="stat-card"><div class="stat-label">Alfeladatok</div><div class="stat-value">${totalSub}</div></div>
+    <div class="stat-card"><div class="stat-label">Szoftver / hó</div><div class="stat-value" style="color:var(--danger)">${haviSw.toLocaleString('hu')} Ft</div></div>
   </div>
   <div class="card">
     <div style="font-weight:500;margin-bottom:0.875rem;font-size:15px">Összes előrehaladás</div>
@@ -604,6 +614,104 @@ function editPlan(pi) {
     data.plans[pi].title=title; data.plans[pi].category=g('f-pcat'); data.plans[pi].description=g('f-pdesc');
     save(); render();
   });
+}
+
+/* ── Software ── */
+function renderSoftware() {
+  const sw = data.software || [];
+  const havali = sw.filter(s => s.cycle === 'havi');
+  const eves = sw.filter(s => s.cycle === 'éves');
+  const havi_total = havali.reduce((s,x) => s + Number(x.cost||0), 0);
+  const eves_total = eves.reduce((s,x) => s + Number(x.cost||0), 0);
+  const havi_ossz = havi_total + Math.round(eves_total / 12);
+
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Szoftverek & Kiadások</div></div>
+    <button class="btn btn-primary btn-sm" onclick="addSoftware()"><i class="ti ti-plus"></i> Hozzáad</button>
+  </div>
+
+  <div class="stats-grid" style="margin-bottom:1.25rem">
+    <div class="stat-card"><div class="stat-label">Havi kiadás</div><div class="stat-value">${havi_total.toLocaleString('hu')} Ft</div></div>
+    <div class="stat-card"><div class="stat-label">Éves kiadás</div><div class="stat-value">${eves_total.toLocaleString('hu')} Ft</div></div>
+    <div class="stat-card"><div class="stat-label">Össz. / hó</div><div class="stat-value" style="color:var(--accent)">${havi_ossz.toLocaleString('hu')} Ft</div></div>
+    <div class="stat-card"><div class="stat-label">Programok száma</div><div class="stat-value">${sw.length}</div></div>
+  </div>
+
+  ${sw.length === 0 ? `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Még nincs szoftver felvéve.</div>` : `
+  <div class="card" style="padding:0;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead>
+        <tr style="border-bottom:0.5px solid var(--border);background:var(--surface-2)">
+          <th style="padding:0.75rem 1rem;text-align:left;font-weight:500;font-size:13px;color:var(--text-muted)">Program</th>
+          <th style="padding:0.75rem 0.5rem;text-align:left;font-weight:500;font-size:13px;color:var(--text-muted)">Kategória</th>
+          <th style="padding:0.75rem 0.5rem;text-align:right;font-weight:500;font-size:13px;color:var(--text-muted)">Díj</th>
+          <th style="padding:0.75rem 0.5rem;text-align:center;font-weight:500;font-size:13px;color:var(--text-muted)">Ciklus</th>
+          <th style="padding:0.75rem 0.75rem;text-align:center;font-weight:500;font-size:13px;color:var(--text-muted)">Aktív</th>
+          <th style="width:64px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sw.map((s,i) => `
+        <tr style="border-bottom:0.5px solid var(--border)${!s.active?' opacity:0.45;':''}" class="sw-row">
+          <td style="padding:0.75rem 1rem">
+            <div style="font-weight:500">${s.name}</div>
+            ${s.note ? `<div style="font-size:12px;color:var(--text-muted)">${s.note}</div>` : ''}
+          </td>
+          <td style="padding:0.75rem 0.5rem;color:var(--text-muted)">${s.category||'—'}</td>
+          <td style="padding:0.75rem 0.5rem;text-align:right;font-weight:500">${Number(s.cost||0).toLocaleString('hu')} Ft</td>
+          <td style="padding:0.75rem 0.5rem;text-align:center">
+            <span class="badge ${s.cycle==='havi'?'badge-blue':'badge-green'}">${s.cycle}</span>
+          </td>
+          <td style="padding:0.75rem 0.5rem;text-align:center">
+            <div class="task-check ${s.active?'done':''}" style="margin:0 auto" onclick="toggleSoftware(${i})">
+              ${s.active?'<i class="ti ti-check" style="font-size:11px"></i>':''}
+            </div>
+          </td>
+          <td style="padding:0.75rem 0.75rem;text-align:right;white-space:nowrap">
+            <button class="btn-icon" onclick="editSoftware(${i})"><i class="ti ti-edit" style="font-size:15px"></i></button>
+            <button class="btn-icon" onclick="deleteSoftware(${i})" style="color:var(--danger)"><i class="ti ti-trash" style="font-size:15px"></i></button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`}`;
+}
+
+function softwareModal(title, s, cb) {
+  openModal(title, `
+    <div class="form-group"><label class="form-label">Program neve *</label><input class="form-input" id="sw-name" value="${s.name||''}" placeholder="pl. Adobe, Notion, GitHub"></div>
+    <div class="info-grid" style="gap:0.75rem">
+      <div class="form-group"><label class="form-label">Kategória</label><input class="form-input" id="sw-cat" value="${s.category||''}" placeholder="pl. Design, Marketing"></div>
+      <div class="form-group"><label class="form-label">Díj (Ft)</label><input class="form-input" id="sw-cost" type="number" value="${s.cost||''}" placeholder="0"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Számlázási ciklus</label>
+      <select class="form-input" id="sw-cycle">
+        <option value="havi" ${(s.cycle||'havi')==='havi'?'selected':''}>Havi</option>
+        <option value="éves" ${s.cycle==='éves'?'selected':''}>Éves</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Megjegyzés</label><input class="form-input" id="sw-note" value="${s.note||''}" placeholder="pl. Pro csomag, 3 felhasználó"></div>
+  `, cb);
+}
+
+function addSoftware() {
+  softwareModal('Új szoftver', {}, () => {
+    const name = g('sw-name'); if (!name) return alert('A program neve kötelező!');
+    data.software.push({ name, category:g('sw-cat'), cost:Number(g('sw-cost'))||0, cycle:g('sw-cycle'), note:g('sw-note'), active:true });
+    save(); render();
+  });
+}
+function editSoftware(i) {
+  softwareModal('Szoftver szerkesztése', data.software[i], () => {
+    const name = g('sw-name'); if (!name) return alert('A program neve kötelező!');
+    data.software[i] = { ...data.software[i], name, category:g('sw-cat'), cost:Number(g('sw-cost'))||0, cycle:g('sw-cycle'), note:g('sw-note') };
+    save(); render();
+  });
+}
+function toggleSoftware(i) { data.software[i].active = !data.software[i].active; save(); render(); }
+function deleteSoftware(i) {
+  if (confirm(`Törlöd: "${data.software[i].name}"?`)) { data.software.splice(i,1); save(); render(); }
 }
 
 /* ── Modal ── */

@@ -176,9 +176,47 @@ textarea.form-input { min-height: 80px; resize: vertical; }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Login ── */
+#login-screen {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999; padding: 1.5rem;
+}
+.login-box {
+  background: var(--surface); border: 0.5px solid var(--border);
+  border-radius: 16px; padding: 2rem 1.75rem; width: 100%; max-width: 360px;
+  text-align: center;
+}
+.login-icon { font-size: 40px; color: var(--accent); margin-bottom: 1rem; }
+.login-title { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+.login-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 1.5rem; }
+.login-input {
+  width: 100%; padding: 0.65rem 1rem; font-size: 18px; letter-spacing: 0.25em;
+  text-align: center; border: 0.5px solid var(--border); border-radius: var(--radius);
+  font-family: inherit; background: var(--surface); color: var(--text);
+  margin-bottom: 0.875rem;
+}
+.login-input:focus { outline: none; border-color: var(--accent); }
+.login-btn { width: 100%; padding: 0.65rem; font-size: 15px; font-weight: 500; border-radius: var(--radius); background: var(--accent); color: #fff; border: none; cursor: pointer; font-family: inherit; }
+.login-btn:hover { background: #2d5cd4; }
+.login-btn:active { transform: scale(0.98); }
+.login-error { font-size: 13px; color: var(--danger); margin-top: 0.5rem; min-height: 18px; }
 </style>
 </head>
 <body>
+
+<!-- Login screen -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-icon"><i class="ti ti-lock"></i></div>
+    <div class="login-title">Cégvezető</div>
+    <div class="login-sub">Add meg a jelszót a belépéshez</div>
+    <input class="login-input" type="password" id="login-input" placeholder="••••••••" maxlength="20" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">Belépés</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
 
 <!-- Desktop sidebar -->
 <aside class="sidebar">
@@ -229,6 +267,27 @@ textarea.form-input { min-height: 80px; resize: vertical; }
 </div>
 
 <script>
+const PWD = '00000000';
+function doLogin() {
+  const val = document.getElementById('login-input').value;
+  if (val === PWD) {
+    sessionStorage.setItem('auth', '1');
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('login-input').value = '';
+  } else {
+    const err = document.getElementById('login-error');
+    err.textContent = 'Hibás jelszó, próbáld újra.';
+    document.getElementById('login-input').value = '';
+    document.getElementById('login-input').focus();
+    setTimeout(() => err.textContent = '', 2500);
+  }
+}
+if (sessionStorage.getItem('auth') !== '1') {
+  setTimeout(() => document.getElementById('login-input').focus(), 100);
+} else {
+  document.getElementById('login-screen').style.display = 'none';
+}
+
 let data = JSON.parse(localStorage.getItem('cegvezeto') || '{}');
 if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
 if (!data.plans) data.plans = [];

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cégvezető</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f5f5f3;
+    --surface: #ffffff;
+    --surface-2: #f9f9f7;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a18;
+    --text-muted: #888780;
+    --accent: #3b6de8;
+    --accent-bg: #e8eeff;
+    --accent-text: #1a3db5;
+    --danger: #e24b4a;
+    --danger-bg: #fceaea;
+    --success: #2d9e6b;
+    --success-bg: #e6f7ef;
+    --radius: 8px;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Layout */
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 260px; background: var(--surface); border-right: 0.5px solid var(--border); padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; position: fixed; top: 0; left: 0; bottom: 0; overflow-y: auto; }
+  .main { margin-left: 260px; flex: 1; padding: 2rem; }
+
+  /* Sidebar */
+  .logo { font-size: 18px; font-weight: 600; padding: 0.5rem 0.75rem 1.5rem; color: var(--text); }
+  .nav-section { font-size: 11px; font-weight: 500; color: var(--text-muted); padding: 0.5rem 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.5rem; }
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 0.5rem 0.75rem; border-radius: var(--radius); cursor: pointer; font-size: 14px; color: var(--text); transition: background 0.1s; }
+  .nav-item:hover { background: var(--surface-2); }
+  .nav-item.active { background: var(--accent-bg); color: var(--accent-text); font-weight: 500; }
+  .nav-item i { font-size: 16px; }
+
+  /* Header */
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .page-title { font-size: 22px; font-weight: 500; }
+  .page-subtitle { font-size: 14px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Buttons */
+  button { cursor: pointer; font-family: inherit; font-size: 14px; border: none; outline: none; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 0.5rem 1rem; border-radius: var(--radius); font-weight: 500; transition: all 0.1s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #2d5cd4; }
+  .btn-ghost { background: transparent; border: 0.5px solid var(--border); color: var(--text); }
+  .btn-ghost:hover { background: var(--surface-2); }
+  .btn-danger { background: var(--danger-bg); color: var(--danger); border: none; }
+  .btn-danger:hover { background: #f5c1c1; }
+  .btn-sm { padding: 0.3rem 0.6rem; font-size: 13px; }
+  .btn-icon { padding: 0.3rem; border-radius: var(--radius); background: transparent; color: var(--text-muted); }
+  .btn-icon:hover { background: var(--surface-2); color: var(--text); }
+
+  /* Cards */
+  .card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 1.25rem; }
+  .card + .card { margin-top: 1rem; }
+
+  /* Stats grid */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+  .stat-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+  .stat-value { font-size: 24px; font-weight: 500; }
+
+  /* Plan cards */
+  .plans-grid { display: grid; gap: 1rem; }
+  .plan-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .plan-header { padding: 1rem 1.25rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; cursor: pointer; }
+  .plan-title { font-size: 16px; font-weight: 500; }
+  .plan-meta { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .plan-body { padding: 0 1.25rem 1.25rem; border-top: 0.5px solid var(--border); }
+  .plan-body.collapsed { display: none; }
+
+  /* Progress bar */
+  .progress-wrap { margin: 0.75rem 0; }
+  .progress-bar { height: 4px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+  .progress-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  /* Tasks */
+  .task-list { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 4px; }
+  .task-item { display: flex; align-items: flex-start; gap: 8px; padding: 0.5rem; border-radius: var(--radius); }
+  .task-item:hover { background: var(--surface-2); }
+  .task-check { width: 18px; height: 18px; border: 1.5px solid var(--border); border-radius: 4px; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .task-check.done { background: var(--success); border-color: var(--success); color: #fff; }
+  .task-text { flex: 1; font-size: 14px; line-height: 1.4; }
+  .task-text.done { text-decoration: line-through; color: var(--text-muted); }
+  .task-actions { display: flex; gap: 2px; opacity: 0; }
+  .task-item:hover .task-actions { opacity: 1; }
+
+  /* Subtasks */
+  .subtask-list { margin-left: 26px; margin-top: 4px; border-left: 2px solid var(--border); padding-left: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .subtask-item { display: flex; align-items: center; gap: 8px; padding: 0.3rem 0.5rem; border-radius: var(--radius); }
+  .subtask-item:hover { background: var(--surface-2); }
+  .subtask-check { width: 14px; height: 14px; border: 1.5px solid var(--border); border-radius: 3px; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .subtask-check.done { background: var(--success); border-color: var(--success); color: #fff; }
+  .subtask-text { flex: 1; font-size: 13px; }
+  .subtask-text.done { text-decoration: line-through; color: var(--text-muted); }
+  .subtask-actions { opacity: 0; }
+  .subtask-item:hover .subtask-actions { opacity: 1; }
+
+  /* Add row */
+  .add-row { display: flex; gap: 8px; margin-top: 0.5rem; }
+  .add-row input { flex: 1; padding: 0.4rem 0.75rem; border: 0.5px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--surface); color: var(--text); }
+  .add-row input:focus { outline: none; border-color: var(--accent); }
+
+  /* Badges */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+  .badge-blue { background: var(--accent-bg); color: var(--accent-text); }
+  .badge-green { background: var(--success-bg); color: var(--success); }
+  .badge-gray { background: var(--surface-2); color: var(--text-muted); }
+
+  /* Forms */
+  .form-group { margin-bottom: 1rem; }
+  .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .form-input { width: 100%; padding: 0.5rem 0.75rem; border: 0.5px solid var(--border); border-radius: var(--radius); font-size: 14px; font-family: inherit; background: var(--surface); color: var(--text); }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+  textarea.form-input { min-height: 80px; resize: vertical; }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: var(--surface); border-radius: 12px; padding: 1.5rem; width: 480px; max-width: 90vw; }
+  .modal-title { font-size: 18px; font-weight: 500; margin-bottom: 1.25rem; }
+  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.25rem; }
+  .hidden { display: none !important; }
+
+  /* Company info */
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 600px) { .info-grid { grid-template-columns: 1fr; } }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="logo"><i class="ti ti-building"></i> Cégvezető</div>
+  <span class="nav-section">Áttekintés</span>
+  <div class="nav-item active" onclick="showPage('dashboard')"><i class="ti ti-layout-dashboard"></i> Irányítópult</div>
+  <div class="nav-item" onclick="showPage('company')"><i class="ti ti-info-circle"></i> Céginformáció</div>
+  <span class="nav-section">Tervezés</span>
+  <div class="nav-item" onclick="showPage('plans')"><i class="ti ti-list-check"></i> Tervek és feladatok</div>
+  <div class="nav-item" onclick="showPage('notes')"><i class="ti ti-notes"></i> Jegyzetek</div>
+</aside>
+
+<!-- Main -->
+<main class="main" id="main-content">
+</main>
+
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal" id="modal-box">
+    <div class="modal-title" id="modal-title">Új terv</div>
+    <div id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Mégse</button>
+      <button class="btn btn-primary" id="modal-save">Mentés</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem('cegvezeto') || '{}');
+if (!data.company) data.company = { name: '', type: '', address: '', phone: '', email: '', taxnum: '', founded: '', description: '' };
+if (!data.plans) data.plans = [];
+if (!data.notes) data.notes = '';
+function save() { localStorage.setItem('cegvezeto', JSON.stringify(data)); }
+
+let currentPage = 'dashboard';
+let expandedPlans = {};
+
+function showPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  render();
+}
+
+function render() {
+  const main = document.getElementById('main-content');
+  if (currentPage === 'dashboard') main.innerHTML = renderDashboard();
+  else if (currentPage === 'company') main.innerHTML = renderCompany();
+  else if (currentPage === 'plans') main.innerHTML = renderPlans();
+  else if (currentPage === 'notes') main.innerHTML = renderNotes();
+}
+
+// Dashboard
+function renderDashboard() {
+  const totalTasks = data.plans.reduce((s, p) => s + p.tasks.length, 0);
+  const doneTasks = data.plans.reduce((s, p) => s + p.tasks.filter(t => t.done).length, 0);
+  const totalSub = data.plans.reduce((s, p) => s + p.tasks.reduce((ss, t) => ss + (t.subtasks||[]).length, 0), 0);
+  const doneSub = data.plans.reduce((s, p) => s + p.tasks.reduce((ss, t) => ss + (t.subtasks||[]).filter(st => st.done).length, 0), 0);
+  const activePlans = data.plans.filter(p => !p.done).length;
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Irányítópult</div><div class="page-subtitle">${data.company.name || 'A cég neve nincs megadva'}</div></div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Aktív tervek</div><div class="stat-value">${activePlans}</div></div>
+    <div class="stat-card"><div class="stat-label">Összes feladat</div><div class="stat-value">${totalTasks}</div></div>
+    <div class="stat-card"><div class="stat-label">Kész feladatok</div><div class="stat-value" style="color:var(--success)">${doneTasks}</div></div>
+    <div class="stat-card"><div class="stat-label">Alfeladatok</div><div class="stat-value">${totalSub}</div></div>
+  </div>
+  <div class="card">
+    <div style="font-weight:500;margin-bottom:1rem">Tervek állapota</div>
+    ${data.plans.length === 0 ? '<p style="color:var(--text-muted);font-size:14px">Még nincsenek tervek. <a href="#" onclick="showPageDirect(\'plans\')">Hozz létre egyet!</a></p>' :
+    data.plans.map(p => {
+      const total = p.tasks.length;
+      const done = p.tasks.filter(t => t.done).length;
+      const pct = total ? Math.round(done/total*100) : 0;
+      return `<div style="margin-bottom:1rem">
+        <div style="display:flex;justify-content:space-between;font-size:14px"><span>${p.title}</span><span style="color:var(--text-muted)">${done}/${total}</span></div>
+        <div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function showPageDirect(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach((el,i) => {
+    if ((page==='dashboard'&&i===0)||(page==='company'&&i===1)||(page==='plans'&&i===2)||(page==='notes'&&i===3)) el.classList.add('active');
+    else el.classList.remove('active');
+  });
+  render();
+}
+
+// Company
+function renderCompany() {
+  const c = data.company;
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Céginformáció</div></div>
+    <button class="btn btn-primary" onclick="editCompany()"><i class="ti ti-edit"></i> Szerkesztés</button>
+  </div>
+  <div class="card">
+    <div class="info-grid">
+      ${field('Cégnév','building',c.name)}${field('Típus','briefcase',c.type)}
+      ${field('Cím','map-pin',c.address)}${field('Telefon','phone',c.phone)}
+      ${field('Email','mail',c.email)}${field('Adószám','receipt-tax',c.taxnum)}
+      ${field('Alapítás éve','calendar',c.founded)}
+    </div>
+    ${c.description ? `<div style="margin-top:1rem;padding-top:1rem;border-top:0.5px solid var(--border)"><div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Leírás</div><div style="font-size:14px;line-height:1.6">${c.description}</div></div>` : ''}
+  </div>`;
+}
+function field(label, icon, val) {
+  return `<div><div style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px"><i class="ti ti-${icon}" style="font-size:14px"></i>${label}</div><div style="font-size:15px;margin-top:2px">${val||'<span style="color:var(--text-muted)">—</span>'}</div></div>`;
+}
+function editCompany() {
+  const c = data.company;
+  openModal('Céginformáció szerkesztése', `
+    <div class="form-group"><label class="form-label">Cégnév</label><input class="form-input" id="f-name" value="${c.name||''}"></div>
+    <div class="form-group"><label class="form-label">Típus (pl. Kft, Bt)</label><input class="form-input" id="f-type" value="${c.type||''}"></div>
+    <div class="form-group"><label class="form-label">Cím</label><input class="form-input" id="f-address" value="${c.address||''}"></div>
+    <div class="info-grid" style="gap:0.75rem">
+      <div class="form-group"><label class="form-label">Telefon</label><input class="form-input" id="f-phone" value="${c.phone||''}"></div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" value="${c.email||''}"></div>
+    </div>
+    <div class="info-grid" style="gap:0.75rem">
+      <div class="form-group"><label class="form-label">Adószám</label><input class="form-input" id="f-taxnum" value="${c.taxnum||''}"></div>
+      <div class="form-group"><label class="form-label">Alapítás éve</label><input class="form-input" id="f-founded" value="${c.founded||''}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Leírás</label><textarea class="form-input" id="f-desc">${c.description||''}</textarea></div>
+  `, () => {
+    data.company = { name:val('f-name'), type:val('f-type'), address:val('f-address'), phone:val('f-phone'), email:val('f-email'), taxnum:val('f-taxnum'), founded:val('f-founded'), description:val('f-desc') };
+    save(); render();
+  });
+}
+
+// Plans
+function renderPlans() {
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Tervek és feladatok</div></div>
+    <button class="btn btn-primary" onclick="addPlan()"><i class="ti ti-plus"></i> Új terv</button>
+  </div>
+  <div class="plans-grid">
+    ${data.plans.length === 0 ? '<div class="card" style="color:var(--text-muted);font-size:14px">Még nincsenek tervek. Kattints az "Új terv" gombra!</div>' : data.plans.map((p,pi) => renderPlanCard(p,pi)).join('')}
+  </div>`;
+}
+
+function renderPlanCard(p, pi) {
+  const total = p.tasks.length;
+  const done = p.tasks.filter(t => t.done).length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  const expanded = expandedPlans[pi] !== false;
+  return `<div class="plan-card">
+    <div class="plan-header" onclick="togglePlan(${pi})">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="plan-title">${p.title}</div>
+          ${p.category ? `<span class="badge badge-blue">${p.category}</span>` : ''}
+          ${pct===100 ? '<span class="badge badge-green">Kész</span>' : ''}
+        </div>
+        ${p.description ? `<div class="plan-meta">${p.description}</div>` : ''}
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <div class="progress-label">${done}/${total} feladat kész${total?` · ${pct}%`:''}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn-icon" onclick="event.stopPropagation();editPlan(${pi})" title="Szerkesztés"><i class="ti ti-edit" style="font-size:16px"></i></button>
+        <button class="btn-icon" onclick="event.stopPropagation();deletePlan(${pi})" title="Törlés" style="color:var(--danger)"><i class="ti ti-trash" style="font-size:16px"></i></button>
+        <i class="ti ti-chevron-${expanded?'up':'down'}" style="font-size:16px;color:var(--text-muted);padding:4px"></i>
+      </div>
+    </div>
+    <div class="plan-body ${expanded?'':'collapsed'}">
+      <div class="task-list" id="tasks-${pi}">
+        ${p.tasks.map((t,ti) => renderTask(t,pi,ti)).join('')}
+      </div>
+      <div class="add-row" style="margin-top:0.75rem">
+        <input placeholder="Új feladat..." id="newtask-${pi}" onkeydown="if(event.key==='Enter')addTask(${pi})">
+        <button class="btn btn-ghost btn-sm" onclick="addTask(${pi})"><i class="ti ti-plus"></i> Hozzáad</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTask(t, pi, ti) {
+  const subs = t.subtasks || [];
+  const subDone = subs.filter(s => s.done).length;
+  return `<div class="task-item">
+    <div class="task-check ${t.done?'done':''}" onclick="toggleTask(${pi},${ti})">
+      ${t.done?'<i class="ti ti-check" style="font-size:11px"></i>':''}
+    </div>
+    <div style="flex:1">
+      <div class="task-text ${t.done?'done':''}">${t.text}</div>
+      ${subs.length>0?`<div style="font-size:12px;color:var(--text-muted);margin-top:1px">${subDone}/${subs.length} alfeladat</div>`:''}
+      ${subs.length>0?`<div class="subtask-list">${subs.map((s,si)=>renderSubtask(s,pi,ti,si)).join('')}</div>`:''}
+      <div class="add-row" style="margin-top:4px">
+        <input placeholder="Alfeladat hozzáadása..." id="newsub-${pi}-${ti}" onkeydown="if(event.key==='Enter')addSubtask(${pi},${ti})" style="font-size:12px;padding:0.3rem 0.6rem">
+        <button class="btn btn-ghost btn-sm" onclick="addSubtask(${pi},${ti})" style="font-size:12px"><i class="ti ti-corner-down-right"></i></button>
+      </div>
+    </div>
+    <div class="task-actions">
+      <button class="btn-icon" onclick="deleteTask(${pi},${ti})"><i class="ti ti-trash" style="font-size:14px;color:var(--danger)"></i></button>
+    </div>
+  </div>`;
+}
+
+function renderSubtask(s, pi, ti, si) {
+  return `<div class="subtask-item">
+    <div class="subtask-check ${s.done?'done':''}" onclick="toggleSubtask(${pi},${ti},${si})">
+      ${s.done?'<i class="ti ti-check" style="font-size:9px"></i>':''}
+    </div>
+    <div class="subtask-text ${s.done?'done':''}" style="flex:1">${s.text}</div>
+    <div class="subtask-actions">
+      <button class="btn-icon" onclick="deleteSubtask(${pi},${ti},${si})"><i class="ti ti-x" style="font-size:13px;color:var(--danger)"></i></button>
+    </div>
+  </div>`;
+}
+
+// Notes
+function renderNotes() {
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Jegyzetek</div></div>
+    <button class="btn btn-primary" onclick="saveNotes()"><i class="ti ti-device-floppy"></i> Mentés</button>
+  </div>
+  <div class="card" style="padding:0">
+    <textarea id="notes-area" style="width:100%;min-height:500px;padding:1.25rem;border:none;border-radius:12px;font-size:14px;font-family:inherit;resize:vertical;background:var(--surface);color:var(--text);line-height:1.7" placeholder="Ide írd a céggel kapcsolatos gondolataidat, terveidet...">${data.notes||''}</textarea>
+  </div>`;
+}
+function saveNotes() {
+  data.notes = document.getElementById('notes-area').value;
+  save();
+  const btn = event.currentTarget;
+  btn.textContent = '✓ Elmentve';
+  setTimeout(() => { btn.innerHTML = '<i class="ti ti-device-floppy"></i> Mentés'; }, 1500);
+}
+
+// Actions
+function togglePlan(pi) {
+  expandedPlans[pi] = expandedPlans[pi] === false ? true : false;
+  render();
+}
+function toggleTask(pi, ti) {
+  data.plans[pi].tasks[ti].done = !data.plans[pi].tasks[ti].done;
+  save(); render();
+}
+function toggleSubtask(pi, ti, si) {
+  data.plans[pi].tasks[ti].subtasks[si].done = !data.plans[pi].tasks[ti].subtasks[si].done;
+  save(); render();
+}
+function addTask(pi) {
+  const inp = document.getElementById(`newtask-${pi}`);
+  const text = inp.value.trim();
+  if (!text) return;
+  data.plans[pi].tasks.push({ text, done: false, subtasks: [] });
+  save(); expandedPlans[pi] = true; render();
+}
+function addSubtask(pi, ti) {
+  const inp = document.getElementById(`newsub-${pi}-${ti}`);
+  const text = inp.value.trim();
+  if (!text) return;
+  if (!data.plans[pi].tasks[ti].subtasks) data.plans[pi].tasks[ti].subtasks = [];
+  data.plans[pi].tasks[ti].subtasks.push({ text, done: false });
+  save(); expandedPlans[pi] = true; render();
+}
+function deleteTask(pi, ti) {
+  data.plans[pi].tasks.splice(ti, 1);
+  save(); render();
+}
+function deleteSubtask(pi, ti, si) {
+  data.plans[pi].tasks[ti].subtasks.splice(si, 1);
+  save(); render();
+}
+function deletePlan(pi) {
+  if (confirm(`Biztosan törlöd a "${data.plans[pi].title}" tervet?`)) {
+    data.plans.splice(pi, 1);
+    save(); render();
+  }
+}
+
+function addPlan() {
+  openModal('Új terv hozzáadása', `
+    <div class="form-group"><label class="form-label">Terv neve *</label><input class="form-input" id="f-ptitle" placeholder="pl. Marketing terv 2025"></div>
+    <div class="form-group"><label class="form-label">Kategória</label><input class="form-input" id="f-pcat" placeholder="pl. Marketing, Pénzügy, HR"></div>
+    <div class="form-group"><label class="form-label">Leírás</label><textarea class="form-input" id="f-pdesc" placeholder="Rövid leírás..."></textarea></div>
+  `, () => {
+    const title = val('f-ptitle');
+    if (!title) return alert('A terv neve kötelező!');
+    data.plans.push({ title, category: val('f-pcat'), description: val('f-pdesc'), tasks: [], done: false });
+    save(); expandedPlans[data.plans.length-1] = true; render();
+  });
+}
+function editPlan(pi) {
+  const p = data.plans[pi];
+  openModal('Terv szerkesztése', `
+    <div class="form-group"><label class="form-label">Terv neve *</label><input class="form-input" id="f-ptitle" value="${p.title}"></div>
+    <div class="form-group"><label class="form-label">Kategória</label><input class="form-input" id="f-pcat" value="${p.category||''}"></div>
+    <div class="form-group"><label class="form-label">Leírás</label><textarea class="form-input" id="f-pdesc">${p.description||''}</textarea></div>
+  `, () => {
+    const title = val('f-ptitle');
+    if (!title) return alert('A terv neve kötelező!');
+    data.plans[pi].title = title;
+    data.plans[pi].category = val('f-pcat');
+    data.plans[pi].description = val('f-pdesc');
+    save(); render();
+  });
+}
+
+// Modal helpers
+let modalCallback = null;
+function openModal(title, body, cb) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = body;
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  modalCallback = cb;
+  document.getElementById('modal-save').onclick = () => { cb(); closeModal(); };
+  setTimeout(() => document.querySelector('.modal .form-input')?.focus(), 50);
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+  modalCallback = null;
+}
+document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+function val(id) { return (document.getElementById(id)?.value || '').trim(); }
+
+// Init
+render();
+</script>
+</body>
+</html>

@@ -410,6 +410,16 @@ async function loadData() {
   startRealtimeSync();
 }
 
+const SUPABASE_FN_URL = SUPABASE_URL + '/functions/v1/notify-telegram';
+function notifyTelegram(userId, message) {
+  if (!userId) return;
+  fetch(SUPABASE_FN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPABASE_KEY },
+    body: JSON.stringify({ user_id: userId, message })
+  }).catch(() => {});
+}
+
 function save() {
   lastLocalChange = Date.now();
   clearTimeout(saveTimer);
@@ -855,10 +865,15 @@ function editTask(pi, ti) {
     <div class="form-group"><label class="form-label">Határidő</label><input class="form-input" type="datetime-local" id="f-tdue" value="${t.dueDate||''}"></div>
   `, () => {
     const text = g('f-ttext'); if(!text) return alert('A feladat szövege kötelező!');
+    const prevAssignee = data.plans[pi].tasks[ti].assignedTo;
+    const newAssignee = document.getElementById('f-tuser').value || null;
     data.plans[pi].tasks[ti].text = text;
-    data.plans[pi].tasks[ti].assignedTo = document.getElementById('f-tuser').value || null;
+    data.plans[pi].tasks[ti].assignedTo = newAssignee;
     data.plans[pi].tasks[ti].dueDate = document.getElementById('f-tdue').value || null;
     save(); render();
+    if (newAssignee && newAssignee !== prevAssignee && newAssignee !== getCurrentUser().id) {
+      notifyTelegram(newAssignee, `Új feladat lett hozzárendelve: "${text}" (${data.plans[pi].title})`);
+    }
   });
 }
 function formatDueDate(d) {
@@ -894,10 +909,15 @@ function editSubtask(pi, ti, si) {
     <div class="form-group"><label class="form-label">Határidő</label><input class="form-input" type="datetime-local" id="f-sdue" value="${s.dueDate||''}"></div>
   `, () => {
     const text = g('f-stext'); if(!text) return alert('A szöveg kötelező!');
+    const prevAssignee = data.plans[pi].tasks[ti].subtasks[si].assignedTo;
+    const newAssignee = document.getElementById('f-suser').value || null;
     data.plans[pi].tasks[ti].subtasks[si].text = text;
-    data.plans[pi].tasks[ti].subtasks[si].assignedTo = document.getElementById('f-suser').value || null;
+    data.plans[pi].tasks[ti].subtasks[si].assignedTo = newAssignee;
     data.plans[pi].tasks[ti].subtasks[si].dueDate = document.getElementById('f-sdue').value || null;
     save(); render();
+    if (newAssignee && newAssignee !== prevAssignee && newAssignee !== getCurrentUser().id) {
+      notifyTelegram(newAssignee, `Új alfeladat lett hozzárendelve: "${text}"`);
+    }
   });
 }
 function deleteTask(pi,ti) { data.plans[pi].tasks.splice(ti,1); save(); render(); }
@@ -918,8 +938,12 @@ function addPlan() {
     <div class="form-group"><label class="form-label">Leírás</label><textarea class="form-input" id="f-pdesc" placeholder="Rövid leírás…"></textarea></div>
   `, () => {
     const title=g('f-ptitle'); if(!title)return alert('A terv neve kötelező!');
-    data.plans.push({title, category:g('f-pcat'), description:g('f-pdesc'), assignedTo: document.getElementById('f-puser').value||null, tasks:[], done:false});
+    const assignee = document.getElementById('f-puser').value || null;
+    data.plans.push({title, category:g('f-pcat'), description:g('f-pdesc'), assignedTo: assignee, tasks:[], done:false});
     save(); expandedPlans[data.plans.length-1]=true; render();
+    if (assignee && assignee !== getCurrentUser().id) {
+      notifyTelegram(assignee, `Új terv lett hozzárendelve: "${title}"`);
+    }
   });
 }
 function editPlan(pi) {
@@ -931,9 +955,14 @@ function editPlan(pi) {
     <div class="form-group"><label class="form-label">Leírás</label><textarea class="form-input" id="f-pdesc">${p.description||''}</textarea></div>
   `, () => {
     const title=g('f-ptitle'); if(!title)return alert('A terv neve kötelező!');
+    const prevAssignee = data.plans[pi].assignedTo;
+    const newAssignee = document.getElementById('f-puser').value || null;
     data.plans[pi].title=title; data.plans[pi].category=g('f-pcat'); data.plans[pi].description=g('f-pdesc');
-    data.plans[pi].assignedTo = document.getElementById('f-puser').value || null;
+    data.plans[pi].assignedTo = newAssignee;
     save(); render();
+    if (newAssignee && newAssignee !== prevAssignee && newAssignee !== getCurrentUser().id) {
+      notifyTelegram(newAssignee, `Terv lett hozzárendelve: "${title}"`);
+    }
   });
 }
 

@@ -290,13 +290,15 @@ textarea.form-input { min-height: 80px; resize: vertical; }
   <button class="nav-item" onclick="showPage('notes',this)"><i class="ti ti-notes"></i> Jegyzetek</button>
   <button class="nav-item" onclick="showPage('software',this)"><i class="ti ti-device-desktop"></i> Szoftverek</button>
   <button class="nav-item" onclick="showPage('calendar',this)"><i class="ti ti-calendar"></i> Naptár</button>
+  <div id="sidebar-admin-section"></div>
   <div id="sidebar-user-pill"></div>
 </aside>
 
 <!-- Mobile top bar -->
 <div class="top-bar">
   <div class="top-bar-title" id="top-bar-title"><i class="ti ti-layout-dashboard"></i> Irányítópult</div>
-  <div id="topbar-user-pill" style="margin-left:auto"></div>
+  <div id="topbar-admin-btn"></div>
+  <div id="topbar-user-pill" style="margin-left:8px"></div>
 </div>
 
 <!-- Main content -->
@@ -475,7 +477,8 @@ const pageTitles = {
   plans:     '<i class="ti ti-list-check"></i> Tervek',
   notes:     '<i class="ti ti-notes"></i> Jegyzetek',
   software:  '<i class="ti ti-device-desktop"></i> Szoftverek',
-  calendar:  '<i class="ti ti-calendar"></i> Naptár'
+  calendar:  '<i class="ti ti-calendar"></i> Naptár',
+  users:     '<i class="ti ti-users"></i> Felhasználók'
 };
 
 function showPage(page, el, bnavId) {
@@ -483,7 +486,7 @@ function showPage(page, el, bnavId) {
   document.getElementById('top-bar-title').innerHTML = pageTitles[page];
   // Desktop nav
   document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.remove('active'));
-  const keywords = { dashboard:'irányító', company:'céginform', plans:'tervek', notes:'jegyzetek', software:'szoftver', calendar:'naptár' };
+  const keywords = { dashboard:'irányító', company:'céginform', plans:'tervek', notes:'jegyzetek', software:'szoftver', calendar:'naptár', users:'felhasználók' };
   document.querySelectorAll('.sidebar .nav-item').forEach(n => {
     if (keywords[page] && n.textContent.trim().toLowerCase().includes(keywords[page])) n.classList.add('active');
   });
@@ -503,7 +506,19 @@ function render() {
   else if (currentPage === 'notes') main.innerHTML = renderNotes();
   else if (currentPage === 'software') main.innerHTML = renderSoftware();
   else if (currentPage === 'calendar') main.innerHTML = renderCalendar();
+  else if (currentPage === 'users') { main.innerHTML = renderUsers(); if (isAdmin()) refreshUsersPage(); }
   renderUserPill();
+  renderAdminNav();
+}
+function isAdmin() { return getCurrentUser().id === 'user1'; }
+function renderAdminNav() {
+  const sidebarEl = document.getElementById('sidebar-admin-section');
+  const topbarEl = document.getElementById('topbar-admin-btn');
+  if (!isAdmin()) { if (sidebarEl) sidebarEl.innerHTML=''; if (topbarEl) topbarEl.innerHTML=''; return; }
+  if (sidebarEl) sidebarEl.innerHTML = `
+    <span class="nav-section">Admin</span>
+    <button class="nav-item ${currentPage==='users'?'active':''}" onclick="showPage('users',this)"><i class="ti ti-users"></i> Felhasználók</button>`;
+  if (topbarEl) topbarEl.innerHTML = `<button class="btn-icon" onclick="showPage('users',null,'users')" title="Felhasználók"><i class="ti ti-users" style="font-size:18px"></i></button>`;
 }
 function renderUserPill() {
   const u = getCurrentUser();
@@ -522,6 +537,69 @@ function renderUserPill() {
       <button class="btn-icon" onclick="doLogout()" title="Kilépés"><i class="ti ti-logout" style="font-size:16px"></i></button>
     </div>`;
   }
+}
+
+/* ── Users (admin) ── */
+let telegramMap = {};
+async function loadTelegramMap() {
+  const { data: rows } = await sb.from('user_telegram').select('user_id, chat_id');
+  telegramMap = {};
+  (rows||[]).forEach(r => telegramMap[r.user_id] = r.chat_id);
+}
+function renderUsers() {
+  if (!isAdmin()) return `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Nincs jogosultságod ehhez az oldalhoz.</div>`;
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Felhasználók</div><div class="page-subtitle">Telegram értesítések kezelése</div></div>
+  </div>
+  <div style="display:grid;gap:0.75rem" id="users-list">
+    ${USERS.map(u => `
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="user-avatar ${u.color}" style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;flex-shrink:0">${u.initial}</div>
+        <div style="flex:1;min-width:160px">
+          <div style="font-weight:500">${u.name}</div>
+          <div style="font-size:13px;color:var(--text-muted);font-family:monospace" id="tg-status-${u.id}">Betöltés…</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="editTelegram('${u.id}')"><i class="ti ti-brand-telegram"></i> Beállítás</button>
+          <button class="btn btn-ghost btn-sm" onclick="testTelegram('${u.id}')"><i class="ti ti-send"></i> Teszt</button>
+        </div>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+async function refreshUsersPage() {
+  await loadTelegramMap();
+  USERS.forEach(u => {
+    const el = document.getElementById('tg-status-'+u.id);
+    if (!el) return;
+    el.textContent = telegramMap[u.id] ? `Chat ID: ${telegramMap[u.id]}` : 'Nincs beállítva Telegram';
+  });
+}
+function editTelegram(userId) {
+  const u = getUserById(userId);
+  const current = telegramMap[userId] || '';
+  openModal(`Telegram – ${u.name}`, `
+    <div class="form-group">
+      <label class="form-label">Telegram Chat ID</label>
+      <input class="form-input" id="tg-chatid" value="${current}" placeholder="pl. 8171881940">
+      <div style="font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.5">
+        A felhasználónak nyissa meg a <b>@Halakdnsknejd_bot</b>-ot Telegramon és nyomjon Start-ot,
+        majd a chat ID-t egy azonosító bottal (pl. @userinfobot) tudja lekérni.
+      </div>
+    </div>
+  `, async () => {
+    const chatId = g('tg-chatid');
+    if (!chatId) { await sb.from('user_telegram').delete().eq('user_id', userId); }
+    else { await sb.from('user_telegram').upsert({ user_id: userId, chat_id: chatId }); }
+    await refreshUsersPage();
+  });
+}
+function testTelegram(userId) {
+  if (!telegramMap[userId]) { alert('Ehhez a felhasználóhoz még nincs Telegram Chat ID beállítva.'); return; }
+  notifyTelegram(userId, 'Teszt üzenet a Cégvezető appból. Az értesítések működnek!');
+  alert('Teszt üzenet elküldve.');
 }
 
 /* ── Dashboard ── */

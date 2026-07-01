@@ -308,6 +308,9 @@ textarea.form-input { min-height: 80px; resize: vertical; }
   <button class="nav-item" onclick="showPage('company',this)"><i class="ti ti-info-circle"></i> Céginformáció</button>
   <span class="nav-section">Ügyfelek</span>
   <button class="nav-item" onclick="showPage('jobs',this)" id="nav-jobs"><i class="ti ti-inbox"></i> Beérkező munkák <span class="nav-badge hidden" id="nav-jobs-badge"></span></button>
+  <button class="nav-item" onclick="showPage('customers',this)"><i class="ti ti-address-book"></i> Ügyfelek</button>
+  <button class="nav-item" onclick="showPage('revenues',this)"><i class="ti ti-cash"></i> Bevételek</button>
+  <button class="nav-item" onclick="showPage('feedback',this)"><i class="ti ti-star"></i> Visszajelzések</button>
   <span class="nav-section">Tervezés</span>
   <button class="nav-item" onclick="showPage('plans',this)"><i class="ti ti-list-check"></i> Tervek és feladatok</button>
   <button class="nav-item" onclick="showPage('notes',this)"><i class="ti ti-notes"></i> Jegyzetek</button>
@@ -439,6 +442,20 @@ async function loadData() {
   startRealtimeSync();
   loadIncomingJobs();
   startJobsRealtimeSync();
+  loadCustomers();
+  loadRevenues();
+  loadEmployees();
+  loadFeedbacks();
+  loadPricing();
+  startBusinessRealtimeSync();
+}
+function startBusinessRealtimeSync() {
+  sb.channel('realtime:business')
+    .on('postgres_changes', { event:'*', schema:'public', table:'customers' }, () => loadCustomers())
+    .on('postgres_changes', { event:'*', schema:'public', table:'revenues' }, () => loadRevenues())
+    .on('postgres_changes', { event:'*', schema:'public', table:'employees' }, () => loadEmployees())
+    .on('postgres_changes', { event:'*', schema:'public', table:'feedback' }, () => loadFeedbacks())
+    .subscribe();
 }
 
 const SUPABASE_FN_URL = SUPABASE_URL + '/functions/v1/notify-telegram';
@@ -699,28 +716,545 @@ function openJobDetail(id) {
     ['Szolgáltatás', st], ['Gyakoriság', fr], ['Kívánt időpont', j.preferred_date],
     ['Forrás', j.source], ['Beérkezett', fmtTgDate(j.created_at)]
   ].filter(([,v]) => v);
+  const custOpts = ['<option value="">— nincs kapcsolt ügyfél —</option>'].concat(
+    customers.map(c => `<option value="${c.id}" ${j.customer_id===c.id?'selected':''}>${escapeHtml(c.name)}</option>`)
+  ).join('');
+  const checklist = Array.isArray(j.checklist) ? j.checklist : [];
+  const empIds = Array.isArray(j.employee_ids) ? j.employee_ids : [];
+  const activeEmps = employees.filter(e => e.active || empIds.includes(e.id));
+  const feedbackUrl = `${location.origin}${location.pathname.replace(/index\.html$/,'').replace(/\/$/,'')}/feedback.html?job=${j.id}`;
   openModal(`${j.name || 'Névtelen'}`, `
     ${rows.map(([l,v]) => `<div class="job-detail-row"><span class="job-detail-label">${l}</span><span class="job-detail-value">${escapeHtml(String(v))}</span></div>`).join('')}
-    ${j.message ? `<div class="form-group" style="margin-top:0.875rem"><label class="form-label">Üzenet</label><div style="font-size:14px;line-height:1.6;background:var(--surface-2);padding:0.75rem;border-radius:var(--radius);white-space:pre-wrap">${escapeHtml(j.message)}</div></div>` : ''}
-    <div class="form-group" style="margin-top:0.875rem"><label class="form-label">Állapot</label>
+    ${j.message ? `<div class="form-group" style="margin-top:0.875rem"><label class="form-label">Ügyfél üzenete</label><div style="font-size:14px;line-height:1.6;background:var(--surface-2);padding:0.75rem;border-radius:var(--radius);white-space:pre-wrap">${escapeHtml(j.message)}</div></div>` : ''}
+
+    <div style="margin-top:1rem;padding-top:0.75rem;border-top:0.5px solid var(--border);font-weight:500;font-size:14px;color:var(--text-muted)">Munka kezelése</div>
+    <div class="form-group" style="margin-top:0.5rem"><label class="form-label">Állapot</label>
       <select class="form-input" id="job-status">${JOB_STATUSES.map(s => `<option value="${s}" ${j.status===s?'selected':''}>${s}</option>`).join('')}</select>
     </div>
-    <div class="form-group"><label class="form-label">Hozzárendelve</label><select class="form-input" id="job-assignee">${userSelectOptions(j.assigned_to)}</select></div>
+    <div class="info-grid" style="gap:0.75rem">
+      <div class="form-group"><label class="form-label">Kezelő (app)</label><select class="form-input" id="job-assignee">${userSelectOptions(j.assigned_to)}</select></div>
+      <div class="form-group"><label class="form-label">Végleges ár (Ft)</label><input class="form-input" type="number" id="job-amount" value="${j.final_amount||''}" placeholder="Elfogadva után"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Kapcsolt ügyfél</label>
+      <div style="display:flex;gap:6px">
+        <select class="form-input" id="job-customer" style="flex:1">${custOpts}</select>
+        <button class="btn btn-ghost btn-sm" onclick="createCustomerFromJob('${j.id}')" title="Létrehozás az űrlap adataiból"><i class="ti ti-plus"></i></button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Kirendelt dolgozók</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:0.5rem;border:0.5px solid var(--border);border-radius:var(--radius);background:var(--surface-2);min-height:40px" id="job-emps">
+        ${activeEmps.length === 0 ? '<span style="font-size:12px;color:var(--text-muted)">Nincs dolgozó rögzítve az Admin › Dolgozók oldalon</span>' :
+          activeEmps.map(e => `<label style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--surface);border:0.5px solid var(--border);border-radius:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="job-emp-cb" value="${e.id}" ${empIds.includes(e.id)?'checked':''}> ${escapeHtml(e.name)}</label>`).join('')}
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Munkalap / Checklist</label>
+      <div id="checklist-items" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px">
+        ${checklist.map((it,i) => `<div style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" ${it.done?'checked':''} onchange="toggleChecklistItem(${i})">
+          <input class="form-input" style="flex:1;padding:0.35rem 0.6rem;font-size:13px" value="${escapeAttr(it.text||'')}" onchange="editChecklistItem(${i}, this.value)">
+          <button class="btn-icon" onclick="removeChecklistItem(${i})"><i class="ti ti-x" style="font-size:14px;color:var(--danger)"></i></button>
+        </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:6px">
+        <input class="form-input" id="new-cl-item" placeholder="Új munkalap pont…" style="flex:1;padding:0.4rem 0.6rem;font-size:13px" onkeydown="if(event.key==='Enter'){event.preventDefault();addChecklistItem();}">
+        <button class="btn btn-ghost btn-sm" onclick="addChecklistItem()"><i class="ti ti-plus"></i></button>
+      </div>
+      ${!checklist.length && j.service_type ? `<button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="prefillChecklist('${j.service_type}')"><i class="ti ti-list"></i> Alap checklista betöltése</button>` : ''}
+    </div>
     <div class="form-group"><label class="form-label">Belső megjegyzés</label><textarea class="form-input" id="job-note" placeholder="Csak belső, az ügyfél nem látja…">${j.internal_note||''}</textarea></div>
-    <button class="btn btn-ghost" style="width:100%;justify-content:center;color:var(--danger);margin-top:0.25rem" onclick="deleteJob('${j.id}')"><i class="ti ti-trash"></i> Megkeresés törlése</button>
+
+    <div style="margin-top:1rem;padding:0.75rem;background:var(--accent-bg);border-radius:var(--radius);font-size:12px;line-height:1.6;color:var(--accent-text)">
+      <div style="font-weight:500;margin-bottom:4px"><i class="ti ti-star"></i> Ügyfél visszajelzés link:</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input class="form-input" readonly value="${feedbackUrl}" style="flex:1;font-family:monospace;font-size:11px;padding:0.35rem 0.5rem" id="fb-url-${j.id}">
+        <button class="btn btn-ghost btn-sm" onclick="copyToClipboard('fb-url-${j.id}')"><i class="ti ti-copy"></i></button>
+      </div>
+    </div>
+
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;color:var(--danger);margin-top:0.75rem" onclick="deleteJob('${j.id}')"><i class="ti ti-trash"></i> Megkeresés törlése</button>
   `, async () => {
     const status = document.getElementById('job-status').value;
     const assigned_to = document.getElementById('job-assignee').value || null;
     const internal_note = document.getElementById('job-note').value || null;
-    await sb.from('incoming_jobs').update({ status, assigned_to, internal_note }).eq('id', j.id);
+    const customer_id = document.getElementById('job-customer').value || null;
+    const final_amount = document.getElementById('job-amount').value ? Number(document.getElementById('job-amount').value) : null;
+    const employee_ids = Array.from(document.querySelectorAll('.job-emp-cb:checked')).map(cb => cb.value);
+    const checklistData = window._currentChecklist || checklist;
+    const wasNotAccepted = j.status !== 'elfogadva';
+    const nowAccepted = status === 'elfogadva';
+    const completed_at = (nowAccepted && !j.completed_at) ? new Date().toISOString() : j.completed_at;
+    await sb.from('incoming_jobs').update({
+      status, assigned_to, internal_note, customer_id, final_amount,
+      employee_ids: JSON.stringify(employee_ids),
+      checklist: JSON.stringify(checklistData),
+      completed_at
+    }).eq('id', j.id);
+    if (wasNotAccepted && nowAccepted && final_amount && customer_id) {
+      const already = revenues.some(r => r.job_id === j.id);
+      if (!already) {
+        await sb.from('revenues').insert({
+          amount: final_amount, service_date: (j.preferred_date || new Date().toISOString().slice(0,10)),
+          customer_id, job_id: j.id,
+          description: `${SERVICE_TYPE_LABELS[j.service_type]||'Takarítás'} — ${j.address||j.name||''}`,
+          paid: false
+        });
+      }
+    }
+    delete window._currentChecklist;
     await loadIncomingJobs();
+    await loadRevenues();
   });
+  window._currentChecklist = JSON.parse(JSON.stringify(checklist));
+}
+function toggleChecklistItem(i) {
+  window._currentChecklist[i].done = !window._currentChecklist[i].done;
+  const cb = document.querySelectorAll('#checklist-items input[type=checkbox]')[i];
+  if (cb) cb.checked = window._currentChecklist[i].done;
+}
+function editChecklistItem(i, val) { window._currentChecklist[i].text = val; }
+function removeChecklistItem(i) {
+  window._currentChecklist.splice(i,1);
+  reRenderChecklist();
+}
+function addChecklistItem() {
+  const inp = document.getElementById('new-cl-item');
+  const txt = inp.value.trim(); if (!txt) return;
+  window._currentChecklist.push({ text: txt, done: false });
+  inp.value = '';
+  reRenderChecklist();
+}
+function reRenderChecklist() {
+  const el = document.getElementById('checklist-items');
+  if (!el) return;
+  el.innerHTML = window._currentChecklist.map((it,i) => `<div style="display:flex;align-items:center;gap:6px">
+    <input type="checkbox" ${it.done?'checked':''} onchange="toggleChecklistItem(${i})">
+    <input class="form-input" style="flex:1;padding:0.35rem 0.6rem;font-size:13px" value="${escapeAttr(it.text||'')}" onchange="editChecklistItem(${i}, this.value)">
+    <button class="btn-icon" onclick="removeChecklistItem(${i})"><i class="ti ti-x" style="font-size:14px;color:var(--danger)"></i></button>
+  </div>`).join('');
+}
+const CHECKLIST_TEMPLATES = {
+  nagytakaritas: ['Ablakok kívül-belül','Fürdőszoba fertőtlenítése','WC alapos takarítása','Konyha, tűzhely, sütő','Hűtőszekrény kívül-belül','Bútorok portalanítása','Padló felmosás minden helyiségben','Szőnyeg porszívózás','Csempék, fugák tisztítása'],
+  rendszeres: ['Portalanítás','Padló felmosás','Fürdőszoba tisztítás','WC tisztítás','Konyhapult, mosogató','Szemetes ürítése'],
+  koltozes: ['Minden szekrény kívül-belül','Ablakok tisztítása','Konyha, tűzhely, sütő zsírtalanítás','Fürdőszoba fertőtlenítése','Padló felmosás','Fugák tisztítása','Csaptelepek fényesítése'],
+  epites_utani: ['Építési por eltávolítása','Ablakok, ajtók tisztítása','Radiátorok tisztítása','Csempék, fugák','Padlók zsír- és portalanítása','Világítótestek portalanítása'],
+  ablaktisztitas: ['Ablakkeret törlése','Ablaküveg tisztítása kívül','Ablaküveg tisztítása belül','Ablakpárkány','Redőnyök portalanítása'],
+  iroda: ['Íróasztalok portalanítása','Számítógép, monitor letörlése','Padló felmosás','Szemetesek ürítése','Konyhácska rendbetétele','Mosdó, WC fertőtlenítése'],
+  egyeb: ['Alapportalanítás','Padló felmosás','Fürdőszoba, WC','Konyha']
+};
+function prefillChecklist(serviceType) {
+  const items = CHECKLIST_TEMPLATES[serviceType] || CHECKLIST_TEMPLATES.egyeb;
+  window._currentChecklist = items.map(t => ({ text:t, done:false }));
+  reRenderChecklist();
+}
+async function createCustomerFromJob(id) {
+  const j = incomingJobs.find(x => x.id === id); if (!j) return;
+  const { data: rows } = await sb.from('customers').insert({
+    name: j.name || 'Új ügyfél', phone: j.phone, email: j.email, address: j.address
+  }).select();
+  if (rows && rows[0]) {
+    await loadCustomers();
+    const sel = document.getElementById('job-customer');
+    if (sel) {
+      const opt = document.createElement('option');
+      opt.value = rows[0].id; opt.textContent = rows[0].name; opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+}
+function copyToClipboard(inputId) {
+  const el = document.getElementById(inputId); if (!el) return;
+  el.select(); navigator.clipboard.writeText(el.value);
+  const btn = el.nextElementSibling;
+  if (btn) { const old = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check"></i>'; setTimeout(()=>btn.innerHTML=old, 1200); }
 }
 async function deleteJob(id) {
   if (!confirm('Biztosan törlöd ezt a megkeresést?')) return;
   closeModal();
   await sb.from('incoming_jobs').delete().eq('id', id);
   await loadIncomingJobs();
+}
+
+/* ── Customers (Ügyfelek) ── */
+let customers = [];
+async function loadCustomers() {
+  const { data: rows } = await sb.from('customers').select('*').order('name');
+  customers = rows || [];
+  if (currentPage === 'customers') render();
+}
+function renderCustomers() {
+  const jobsByCustomer = {};
+  const revByCustomer = {};
+  incomingJobs.forEach(j => { if (j.customer_id) (jobsByCustomer[j.customer_id] ||= []).push(j); });
+  revenues.forEach(r => { if (r.customer_id) revByCustomer[r.customer_id] = (revByCustomer[r.customer_id]||0) + Number(r.amount||0); });
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Ügyfelek</div><div class="page-subtitle">Állandó és visszatérő ügyfelek</div></div>
+    <button class="btn btn-primary btn-sm" onclick="addCustomer()"><i class="ti ti-plus"></i> Új ügyfél</button>
+  </div>
+  ${customers.length === 0
+    ? `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Még nincs rögzített ügyfél. Elfogadott munkából automatikusan létrehozhatsz ügyfelet.</div>`
+    : `<div style="display:grid;gap:0.75rem">${customers.map(c => {
+        const jobCount = (jobsByCustomer[c.id]||[]).length;
+        const rev = revByCustomer[c.id]||0;
+        return `<div class="job-card" onclick="editCustomer('${c.id}')">
+          <div class="job-card-top">
+            <div>
+              <div class="job-card-name">${escapeHtml(c.name)}</div>
+              <div class="job-card-meta">
+                ${c.phone ? `<span><i class="ti ti-phone" style="font-size:12px"></i> ${escapeHtml(c.phone)}</span>` : ''}
+                ${c.email ? `<span><i class="ti ti-mail" style="font-size:12px"></i> ${escapeHtml(c.email)}</span>` : ''}
+                ${c.address ? `<span><i class="ti ti-map-pin" style="font-size:12px"></i> ${escapeHtml(c.address)}</span>` : ''}
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+              ${jobCount ? `<span class="badge badge-blue">${jobCount} munka</span>` : ''}
+              ${rev ? `<span class="badge badge-green">${rev.toLocaleString('hu')} Ft</span>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}</div>`}`;
+}
+function customerModal(title, c, cb) {
+  openModal(title, `
+    <div class="form-group"><label class="form-label">Név *</label><input class="form-input" id="cu-name" value="${escapeAttr(c.name)}"></div>
+    <div class="info-grid" style="gap:0.75rem">
+      <div class="form-group"><label class="form-label">Telefon</label><input class="form-input" id="cu-phone" value="${escapeAttr(c.phone)}"></div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="cu-email" value="${escapeAttr(c.email)}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Cím</label><input class="form-input" id="cu-address" value="${escapeAttr(c.address)}"></div>
+    <div class="form-group"><label class="form-label">Megjegyzés</label><textarea class="form-input" id="cu-notes">${escapeHtml(c.notes||'')}</textarea></div>
+  `, cb);
+}
+function escapeAttr(s) { return (s||'').replace(/"/g,'&quot;'); }
+function addCustomer() {
+  customerModal('Új ügyfél', {}, async () => {
+    const name = g('cu-name'); if (!name) return alert('A név kötelező!');
+    await sb.from('customers').insert({
+      name, phone:g('cu-phone')||null, email:g('cu-email')||null,
+      address:g('cu-address')||null, notes:g('cu-notes')||null
+    });
+    await loadCustomers();
+  });
+}
+function editCustomer(id) {
+  const c = customers.find(x => x.id === id); if (!c) return;
+  customerModal(c.name, c, async () => {
+    const name = g('cu-name'); if (!name) return alert('A név kötelező!');
+    await sb.from('customers').update({
+      name, phone:g('cu-phone')||null, email:g('cu-email')||null,
+      address:g('cu-address')||null, notes:g('cu-notes')||null
+    }).eq('id', id);
+    await loadCustomers();
+  });
+  setTimeout(() => {
+    const foot = document.querySelector('.modal-footer');
+    if (foot && !foot.querySelector('.del-cu')) {
+      const b = document.createElement('button');
+      b.className = 'btn btn-ghost del-cu';
+      b.style.color = 'var(--danger)';
+      b.style.marginRight = 'auto';
+      b.innerHTML = '<i class="ti ti-trash"></i> Törlés';
+      b.onclick = async () => {
+        if (!confirm('Törlöd ezt az ügyfelet?')) return;
+        await sb.from('customers').delete().eq('id', id);
+        closeModal(); await loadCustomers();
+      };
+      foot.insertBefore(b, foot.firstChild);
+    }
+  }, 90);
+}
+
+/* ── Revenues (Bevételek) ── */
+let revenues = [];
+async function loadRevenues() {
+  const { data: rows } = await sb.from('revenues').select('*').order('service_date', { ascending:false });
+  revenues = rows || [];
+  if (currentPage === 'revenues' || currentPage === 'dashboard' || currentPage === 'customers') render();
+}
+function renderRevenues() {
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const thisMonth = revenues.filter(r => (r.service_date||'').startsWith(ym));
+  const thisMonthTotal = thisMonth.reduce((s,r) => s + Number(r.amount||0), 0);
+  const yearTotal = revenues.filter(r => (r.service_date||'').startsWith(String(now.getFullYear()))).reduce((s,r) => s + Number(r.amount||0), 0);
+  const unpaid = revenues.filter(r => !r.paid).reduce((s,r) => s + Number(r.amount||0), 0);
+  const sw = data.software || [];
+  const monthExp = sw.filter(s=>s.active).reduce((s,x)=> s + (x.cycle==='havi' ? Number(x.cost||0) : Math.round(Number(x.cost||0)/12)), 0);
+  const profit = thisMonthTotal - monthExp;
+  const custMap = {}; customers.forEach(c => custMap[c.id] = c.name);
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Bevételek</div><div class="page-subtitle">Havi bevétel és profit</div></div>
+    <button class="btn btn-primary btn-sm" onclick="addRevenue()"><i class="ti ti-plus"></i> Új bevétel</button>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Ez a hónap</div><div class="stat-value" style="color:var(--success)">${thisMonthTotal.toLocaleString('hu')} Ft</div></div>
+    <div class="stat-card"><div class="stat-label">Kiadás / hó</div><div class="stat-value" style="color:var(--danger)">${monthExp.toLocaleString('hu')} Ft</div></div>
+    <div class="stat-card"><div class="stat-label">Profit / hó</div><div class="stat-value" style="color:${profit>=0?'var(--accent)':'var(--danger)'}">${profit.toLocaleString('hu')} Ft</div></div>
+    <div class="stat-card"><div class="stat-label">Kintlévőség</div><div class="stat-value" style="color:${unpaid>0?'#92400e':'var(--text-muted)'}">${unpaid.toLocaleString('hu')} Ft</div></div>
+  </div>
+  <div class="stats-grid" style="grid-template-columns:1fr">
+    <div class="stat-card"><div class="stat-label">${now.getFullYear()} teljes bevétel</div><div class="stat-value">${yearTotal.toLocaleString('hu')} Ft</div></div>
+  </div>
+  ${revenues.length === 0 ? `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Még nincs bevétel rögzítve.</div>` : `
+  <div class="card" style="padding:0;overflow:hidden;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:14px;min-width:600px">
+      <thead>
+        <tr style="border-bottom:0.5px solid var(--border);background:var(--surface-2)">
+          <th style="padding:0.75rem 1rem;text-align:left;font-weight:500;font-size:13px;color:var(--text-muted)">Dátum</th>
+          <th style="padding:0.75rem 0.5rem;text-align:left;font-weight:500;font-size:13px;color:var(--text-muted)">Leírás</th>
+          <th style="padding:0.75rem 0.5rem;text-align:left;font-weight:500;font-size:13px;color:var(--text-muted)">Ügyfél</th>
+          <th style="padding:0.75rem 0.5rem;text-align:right;font-weight:500;font-size:13px;color:var(--text-muted)">Összeg</th>
+          <th style="padding:0.75rem 0.5rem;text-align:center;font-weight:500;font-size:13px;color:var(--text-muted)">Kifizetve</th>
+          <th style="width:64px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${revenues.map(r => `
+        <tr style="border-bottom:0.5px solid var(--border)">
+          <td style="padding:0.75rem 1rem;white-space:nowrap">${r.service_date||''}</td>
+          <td style="padding:0.75rem 0.5rem">${escapeHtml(r.description||'—')}</td>
+          <td style="padding:0.75rem 0.5rem;color:var(--text-muted)">${r.customer_id ? escapeHtml(custMap[r.customer_id]||'—') : '—'}</td>
+          <td style="padding:0.75rem 0.5rem;text-align:right;font-weight:500">${Number(r.amount||0).toLocaleString('hu')} Ft</td>
+          <td style="padding:0.75rem 0.5rem;text-align:center">
+            <div class="task-check ${r.paid?'done':''}" style="margin:0 auto" onclick="toggleRevenuePaid('${r.id}',${!r.paid})">
+              ${r.paid?'<i class="ti ti-check" style="font-size:11px"></i>':''}
+            </div>
+          </td>
+          <td style="padding:0.75rem 0.75rem;text-align:right;white-space:nowrap">
+            <button class="btn-icon" onclick="editRevenue('${r.id}')"><i class="ti ti-edit" style="font-size:15px"></i></button>
+            <button class="btn-icon" onclick="deleteRevenue('${r.id}')" style="color:var(--danger)"><i class="ti ti-trash" style="font-size:15px"></i></button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`}`;
+}
+function revenueModal(title, r, cb) {
+  const custOpts = ['<option value="">— nincs ügyfél —</option>'].concat(
+    customers.map(c => `<option value="${c.id}" ${r.customer_id===c.id?'selected':''}>${escapeHtml(c.name)}</option>`)
+  ).join('');
+  openModal(title, `
+    <div class="info-grid" style="gap:0.75rem">
+      <div class="form-group"><label class="form-label">Dátum *</label><input class="form-input" type="date" id="rv-date" value="${r.service_date||new Date().toISOString().slice(0,10)}"></div>
+      <div class="form-group"><label class="form-label">Összeg (Ft) *</label><input class="form-input" type="number" id="rv-amount" value="${r.amount||''}" placeholder="0"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Leírás</label><input class="form-input" id="rv-desc" value="${escapeAttr(r.description)}" placeholder="pl. Nagytakarítás - Budapest V. ker."></div>
+    <div class="form-group"><label class="form-label">Ügyfél</label><select class="form-input" id="rv-cust">${custOpts}</select></div>
+    <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="rv-paid" ${r.paid!==false?'checked':''}> Kifizetve</label></div>
+  `, cb);
+}
+function addRevenue() {
+  revenueModal('Új bevétel', { paid:true }, async () => {
+    const amount = Number(g('rv-amount')); if (!amount) return alert('Az összeg kötelező!');
+    await sb.from('revenues').insert({
+      amount, service_date: g('rv-date'), description: g('rv-desc')||null,
+      customer_id: document.getElementById('rv-cust').value || null,
+      paid: document.getElementById('rv-paid').checked
+    });
+    await loadRevenues();
+  });
+}
+function editRevenue(id) {
+  const r = revenues.find(x => x.id === id); if (!r) return;
+  revenueModal('Bevétel szerkesztése', r, async () => {
+    const amount = Number(g('rv-amount')); if (!amount) return alert('Az összeg kötelező!');
+    await sb.from('revenues').update({
+      amount, service_date: g('rv-date'), description: g('rv-desc')||null,
+      customer_id: document.getElementById('rv-cust').value || null,
+      paid: document.getElementById('rv-paid').checked
+    }).eq('id', id);
+    await loadRevenues();
+  });
+}
+async function toggleRevenuePaid(id, paid) {
+  await sb.from('revenues').update({ paid }).eq('id', id);
+  await loadRevenues();
+}
+async function deleteRevenue(id) {
+  if (!confirm('Törlöd ezt a bevételt?')) return;
+  await sb.from('revenues').delete().eq('id', id);
+  await loadRevenues();
+}
+
+/* ── Employees (Dolgozók) ── */
+let employees = [];
+async function loadEmployees() {
+  const { data: rows } = await sb.from('employees').select('*').order('name');
+  employees = rows || [];
+  if (currentPage === 'employees') render();
+}
+function renderEmployees() {
+  if (!isAdmin()) return `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Nincs jogosultságod ehhez az oldalhoz.</div>`;
+  const active = employees.filter(e => e.active);
+  const inactive = employees.filter(e => !e.active);
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Dolgozók</div><div class="page-subtitle">Takarító csapat kezelése</div></div>
+    <button class="btn btn-primary btn-sm" onclick="addEmployee()"><i class="ti ti-plus"></i> Új dolgozó</button>
+  </div>
+  ${employees.length === 0 ? `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Még nincs dolgozó rögzítve.</div>` : `
+  <div style="display:grid;gap:0.75rem">
+    ${[...active, ...inactive].map(e => `
+      <div class="card" style="${!e.active?'opacity:0.5':''}">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);color:var(--accent-text);display:flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0">${(e.name||'?').charAt(0).toUpperCase()}</div>
+          <div style="flex:1;min-width:160px">
+            <div style="font-weight:500">${escapeHtml(e.name)} ${!e.active?'<span class="badge badge-gray">inaktív</span>':''}</div>
+            <div style="font-size:13px;color:var(--text-muted)">
+              ${e.role ? escapeHtml(e.role) : ''}
+              ${e.phone ? ` · ${escapeHtml(e.phone)}` : ''}
+              ${e.hourly_rate ? ` · ${Number(e.hourly_rate).toLocaleString('hu')} Ft/óra` : ''}
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="editEmployee('${e.id}')"><i class="ti ti-edit"></i></button>
+        </div>
+      </div>`).join('')}
+  </div>`}`;
+}
+function employeeModal(title, e, cb) {
+  openModal(title, `
+    <div class="form-group"><label class="form-label">Név *</label><input class="form-input" id="em-name" value="${escapeAttr(e.name)}"></div>
+    <div class="info-grid" style="gap:0.75rem">
+      <div class="form-group"><label class="form-label">Beosztás</label><input class="form-input" id="em-role" value="${escapeAttr(e.role)}" placeholder="pl. Takarító"></div>
+      <div class="form-group"><label class="form-label">Telefon</label><input class="form-input" id="em-phone" value="${escapeAttr(e.phone)}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Óradíj (Ft)</label><input class="form-input" type="number" id="em-rate" value="${e.hourly_rate||''}"></div>
+    <div class="form-group"><label class="form-label">Megjegyzés</label><input class="form-input" id="em-note" value="${escapeAttr(e.note)}"></div>
+    <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-active" ${e.active!==false?'checked':''}> Aktív</label></div>
+  `, cb);
+}
+function addEmployee() {
+  employeeModal('Új dolgozó', { active:true }, async () => {
+    const name = g('em-name'); if (!name) return alert('A név kötelező!');
+    await sb.from('employees').insert({
+      name, role:g('em-role')||null, phone:g('em-phone')||null,
+      hourly_rate: g('em-rate') ? Number(g('em-rate')) : null,
+      note: g('em-note')||null, active: document.getElementById('em-active').checked
+    });
+    await loadEmployees();
+  });
+}
+function editEmployee(id) {
+  const e = employees.find(x => x.id === id); if (!e) return;
+  employeeModal(e.name, e, async () => {
+    const name = g('em-name'); if (!name) return alert('A név kötelező!');
+    await sb.from('employees').update({
+      name, role:g('em-role')||null, phone:g('em-phone')||null,
+      hourly_rate: g('em-rate') ? Number(g('em-rate')) : null,
+      note: g('em-note')||null, active: document.getElementById('em-active').checked
+    }).eq('id', id);
+    await loadEmployees();
+  });
+  setTimeout(() => {
+    const foot = document.querySelector('.modal-footer');
+    if (foot && !foot.querySelector('.del-em')) {
+      const b = document.createElement('button');
+      b.className = 'btn btn-ghost del-em';
+      b.style.color = 'var(--danger)'; b.style.marginRight = 'auto';
+      b.innerHTML = '<i class="ti ti-trash"></i> Törlés';
+      b.onclick = async () => {
+        if (!confirm('Törlöd ezt a dolgozót?')) return;
+        await sb.from('employees').delete().eq('id', id);
+        closeModal(); await loadEmployees();
+      };
+      foot.insertBefore(b, foot.firstChild);
+    }
+  }, 90);
+}
+
+/* ── Feedback (Visszajelzések) ── */
+let feedbacks = [];
+async function loadFeedbacks() {
+  const { data: rows } = await sb.from('feedback').select('*').order('created_at', { ascending:false });
+  feedbacks = rows || [];
+  if (currentPage === 'feedback') render();
+}
+function starHtml(rating, size) {
+  const s = size || 16;
+  let html = '';
+  for (let i = 1; i <= 5; i++) {
+    html += `<i class="ti ti-star${i<=rating?'-filled':''}" style="font-size:${s}px;color:${i<=rating?'#f59e0b':'var(--border)'}"></i>`;
+  }
+  return html;
+}
+function renderFeedback() {
+  const avg = feedbacks.length ? (feedbacks.reduce((s,f)=>s+f.rating,0)/feedbacks.length) : 0;
+  const jobMap = {}; incomingJobs.forEach(j => jobMap[j.id] = j);
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Visszajelzések</div><div class="page-subtitle">Ügyfelek értékelése</div></div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Összes értékelés</div><div class="stat-value">${feedbacks.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Átlag</div><div class="stat-value" style="color:#f59e0b">${avg.toFixed(1)} ★</div></div>
+    <div class="stat-card"><div class="stat-label">5 csillagos</div><div class="stat-value" style="color:var(--success)">${feedbacks.filter(f=>f.rating===5).length}</div></div>
+    <div class="stat-card"><div class="stat-label">≤ 3 csillag</div><div class="stat-value" style="color:var(--danger)">${feedbacks.filter(f=>f.rating<=3).length}</div></div>
+  </div>
+  ${feedbacks.length === 0 ? `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">
+    Még nincs visszajelzés. Az elfogadott munka részleteinél tudsz linket generálni az ügyfélnek.
+  </div>` : `<div style="display:grid;gap:0.75rem">
+    ${feedbacks.map(f => {
+      const j = f.job_id ? jobMap[f.job_id] : null;
+      return `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
+          <div>
+            <div style="font-weight:500">${escapeHtml(f.customer_name || (j?j.name:null) || 'Névtelen')}</div>
+            ${j ? `<div style="font-size:12px;color:var(--text-muted)">Munka: ${escapeHtml(j.name||'—')}${j.address?` · ${escapeHtml(j.address)}`:''}</div>` : ''}
+          </div>
+          <div>${starHtml(f.rating)}</div>
+        </div>
+        ${f.comment ? `<div style="font-size:14px;color:var(--text);line-height:1.5;margin-top:4px">${escapeHtml(f.comment)}</div>` : ''}
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${fmtTgDate(f.created_at)||''}</div>
+      </div>`;
+    }).join('')}
+  </div>`}`;
+}
+
+/* ── Pricing (Árazás) ── */
+let pricingConfig = { base_rate:1500, min_price:15000, multipliers:{ nagytakaritas:1.5, rendszeres:1.0, koltozes:2.0, epites_utani:2.5, ablaktisztitas:1.2, iroda:1.1, egyeb:1.3 } };
+async function loadPricing() {
+  const { data: row } = await sb.from('settings').select('value').eq('key','pricing').single();
+  if (row && row.value) { try { pricingConfig = JSON.parse(row.value); } catch(e){} }
+  if (currentPage === 'pricing') render();
+}
+function renderPricing() {
+  if (!isAdmin()) return `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Nincs jogosultságod ehhez az oldalhoz.</div>`;
+  const m = pricingConfig.multipliers || {};
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Árazás</div><div class="page-subtitle">A form.html árkalkulátorának alapja</div></div>
+    <button class="btn btn-primary btn-sm" onclick="savePricing()"><i class="ti ti-device-floppy"></i> Mentés</button>
+  </div>
+  <div class="card">
+    <div class="info-grid" style="gap:0.75rem">
+      <div class="form-group"><label class="form-label">Alapdíj (Ft / m²)</label><input class="form-input" type="number" id="pr-base" value="${pricingConfig.base_rate||0}"></div>
+      <div class="form-group"><label class="form-label">Minimum ár (Ft)</label><input class="form-input" type="number" id="pr-min" value="${pricingConfig.min_price||0}"></div>
+    </div>
+    <div style="font-weight:500;margin:1rem 0 0.5rem;font-size:14px">Szorzók szolgáltatás típusonként</div>
+    ${Object.entries(SERVICE_TYPE_LABELS).map(([k,l]) => `
+      <div style="display:flex;align-items:center;gap:12px;padding:0.5rem 0;border-bottom:0.5px solid var(--border)">
+        <div style="flex:1;font-size:14px">${l}</div>
+        <input class="form-input" type="number" step="0.1" id="pr-m-${k}" value="${m[k]||1}" style="width:100px">
+      </div>`).join('')}
+    <div style="font-size:12px;color:var(--text-muted);margin-top:0.75rem;line-height:1.5">
+      Képlet: <b>max(minimum ár, terület × alapdíj × szorzó)</b>
+    </div>
+  </div>`;
+}
+async function savePricing() {
+  const cfg = {
+    base_rate: Number(g('pr-base'))||0,
+    min_price: Number(g('pr-min'))||0,
+    multipliers: {}
+  };
+  Object.keys(SERVICE_TYPE_LABELS).forEach(k => {
+    cfg.multipliers[k] = Number(g(`pr-m-${k}`)) || 1;
+  });
+  await sb.from('settings').upsert({ key:'pricing', value: JSON.stringify(cfg) });
+  pricingConfig = cfg;
+  alert('Árazás mentve.');
 }
 
 let currentPage = 'dashboard';
@@ -733,11 +1267,16 @@ const pageTitles = {
   dashboard: '<i class="ti ti-layout-dashboard"></i> Irányítópult',
   company:   '<i class="ti ti-info-circle"></i> Céginformáció',
   jobs:      '<i class="ti ti-inbox"></i> Beérkező munkák',
+  customers: '<i class="ti ti-address-book"></i> Ügyfelek',
+  revenues:  '<i class="ti ti-cash"></i> Bevételek',
+  feedback:  '<i class="ti ti-star"></i> Visszajelzések',
   plans:     '<i class="ti ti-list-check"></i> Tervek',
   notes:     '<i class="ti ti-notes"></i> Jegyzetek',
   software:  '<i class="ti ti-device-desktop"></i> Szoftverek',
   calendar:  '<i class="ti ti-calendar"></i> Naptár',
-  users:     '<i class="ti ti-users"></i> Felhasználók'
+  users:     '<i class="ti ti-users"></i> Felhasználók',
+  employees: '<i class="ti ti-user-cog"></i> Dolgozók',
+  pricing:   '<i class="ti ti-tag"></i> Árazás'
 };
 
 function showPage(page, el, bnavId) {
@@ -745,7 +1284,7 @@ function showPage(page, el, bnavId) {
   document.getElementById('top-bar-title').innerHTML = pageTitles[page];
   // Desktop nav
   document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.remove('active'));
-  const keywords = { dashboard:'irányító', company:'céginform', jobs:'beérkező', plans:'tervek', notes:'jegyzetek', software:'szoftver', calendar:'naptár', users:'felhasználók' };
+  const keywords = { dashboard:'irányító', company:'céginform', jobs:'beérkező', customers:'ügyfelek', revenues:'bevétel', feedback:'visszajelz', plans:'tervek', notes:'jegyzetek', software:'szoftver', calendar:'naptár', users:'felhasználók', employees:'dolgoz', pricing:'árazás' };
   document.querySelectorAll('.sidebar .nav-item').forEach(n => {
     if (keywords[page] && n.textContent.trim().toLowerCase().includes(keywords[page])) n.classList.add('active');
   });
@@ -762,11 +1301,16 @@ function render() {
   if (currentPage === 'dashboard') main.innerHTML = renderDashboard();
   else if (currentPage === 'company') main.innerHTML = renderCompany();
   else if (currentPage === 'jobs') main.innerHTML = renderJobs();
+  else if (currentPage === 'customers') main.innerHTML = renderCustomers();
+  else if (currentPage === 'revenues') main.innerHTML = renderRevenues();
+  else if (currentPage === 'feedback') main.innerHTML = renderFeedback();
   else if (currentPage === 'plans') main.innerHTML = renderPlans();
   else if (currentPage === 'notes') main.innerHTML = renderNotes();
   else if (currentPage === 'software') main.innerHTML = renderSoftware();
   else if (currentPage === 'calendar') main.innerHTML = renderCalendar();
   else if (currentPage === 'users') { main.innerHTML = renderUsers(); if (isAdmin()) refreshUsersPage(); }
+  else if (currentPage === 'employees') main.innerHTML = renderEmployees();
+  else if (currentPage === 'pricing') main.innerHTML = renderPricing();
   renderUserPill();
   renderAdminNav();
 }
@@ -777,7 +1321,9 @@ function renderAdminNav() {
   if (!isAdmin()) { if (sidebarEl) sidebarEl.innerHTML=''; if (topbarEl) topbarEl.innerHTML=''; return; }
   if (sidebarEl) sidebarEl.innerHTML = `
     <span class="nav-section">Admin</span>
-    <button class="nav-item ${currentPage==='users'?'active':''}" onclick="showPage('users',this)"><i class="ti ti-users"></i> Felhasználók</button>`;
+    <button class="nav-item ${currentPage==='users'?'active':''}" onclick="showPage('users',this)"><i class="ti ti-users"></i> Felhasználók</button>
+    <button class="nav-item ${currentPage==='employees'?'active':''}" onclick="showPage('employees',this)"><i class="ti ti-user-cog"></i> Dolgozók</button>
+    <button class="nav-item ${currentPage==='pricing'?'active':''}" onclick="showPage('pricing',this)"><i class="ti ti-tag"></i> Árazás</button>`;
   if (topbarEl) topbarEl.innerHTML = `<button class="btn-icon" onclick="showPage('users',null,'users')" title="Felhasználók"><i class="ti ti-users" style="font-size:18px"></i></button>`;
 }
 function renderUserPill() {
@@ -871,6 +1417,11 @@ function renderDashboard() {
   const pct = totalTasks ? Math.round(doneTasks/totalTasks*100) : 0;
   const sw = data.software || [];
   const haviSw = sw.filter(s=>s.active).reduce((s,x)=> s + (x.cycle==='havi' ? Number(x.cost||0) : Math.round(Number(x.cost||0)/12)), 0);
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const monthRev = revenues.filter(r => (r.service_date||'').startsWith(ym)).reduce((s,r)=>s+Number(r.amount||0),0);
+  const profit = monthRev - haviSw;
+  const newJobsCount = incomingJobs.filter(j => j.status === 'új').length;
   return `
   <div class="page-header">
     <div>
@@ -879,11 +1430,14 @@ function renderDashboard() {
     </div>
   </div>
   <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Új megkeresés</div><div class="stat-value" style="color:${newJobsCount>0?'#92400e':'var(--text)'}">${newJobsCount}</div></div>
+    <div class="stat-card"><div class="stat-label">Bevétel / hó</div><div class="stat-value" style="color:var(--success)">${monthRev.toLocaleString('hu')} Ft</div></div>
+    <div class="stat-card"><div class="stat-label">Kiadás / hó</div><div class="stat-value" style="color:var(--danger)">${haviSw.toLocaleString('hu')} Ft</div></div>
+    <div class="stat-card"><div class="stat-label">Profit / hó</div><div class="stat-value" style="color:${profit>=0?'var(--accent)':'var(--danger)'}">${profit.toLocaleString('hu')} Ft</div></div>
     <div class="stat-card"><div class="stat-label">Aktív tervek</div><div class="stat-value">${activePlans}</div></div>
     <div class="stat-card"><div class="stat-label">Összes feladat</div><div class="stat-value">${totalTasks}</div></div>
     <div class="stat-card"><div class="stat-label"><span style="color:var(--success)">Kész</span> feladat</div><div class="stat-value" style="color:var(--success)">${doneTasks}</div></div>
     <div class="stat-card"><div class="stat-label">Alfeladatok</div><div class="stat-value">${totalSub}</div></div>
-    <div class="stat-card"><div class="stat-label">Szoftver / hó</div><div class="stat-value" style="color:var(--danger)">${haviSw.toLocaleString('hu')} Ft</div></div>
   </div>
   <div class="card">
     <div style="font-weight:500;margin-bottom:0.875rem;font-size:15px">Összes előrehaladás</div>

@@ -31,7 +31,10 @@
       "Bash(where node *)",
       "Bash(where python *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(curl.exe -s -o /dev/null -w \"%{http_code}\" \"https://paszuppaszup-cell.github.io/takaritas/form.html?v=$\\(date +%s\\)\")",
+      "Bash(curl.exe -s \"https://paszuppaszup-cell.github.io/takaritas/form.html?v=$\\(date +%s\\)\")"
     ]
   }
 }

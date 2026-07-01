@@ -929,8 +929,10 @@ function updateSubtaskNote(pi,ti,si) { const el=document.getElementById(`sn-${pi
 function addTask(pi) {
   const inp=document.getElementById(`nt-${pi}`), text=inp.value.trim();
   if(!text)return;
-  data.plans[pi].tasks.push({text,done:false,subtasks:[],assignedTo:getCurrentUser().id,dueDate:null});
+  const assignee = getCurrentUser().id;
+  data.plans[pi].tasks.push({text,done:false,subtasks:[],assignedTo:assignee,dueDate:null});
   save(); expandedPlans[pi]=true; render();
+  notifyTelegram(assignee, `Új feladat: "${text}" (${data.plans[pi].title})`);
 }
 function editTask(pi, ti) {
   const t = data.plans[pi].tasks[ti];
@@ -949,7 +951,7 @@ function editTask(pi, ti) {
     data.plans[pi].tasks[ti].assignedTo = newAssignee;
     data.plans[pi].tasks[ti].dueDate = document.getElementById('f-tdue').value || null;
     save(); render();
-    if (newAssignee && newAssignee !== prevAssignee && newAssignee !== getCurrentUser().id) {
+    if (newAssignee && newAssignee !== prevAssignee) {
       notifyTelegram(newAssignee, `Új feladat lett hozzárendelve: "${text}" (${data.plans[pi].title})`);
     }
   });
@@ -976,8 +978,10 @@ function addSubtask(pi,ti) {
   const inp=document.getElementById(`ns-${pi}-${ti}`), text=inp.value.trim();
   if(!text)return;
   if(!data.plans[pi].tasks[ti].subtasks) data.plans[pi].tasks[ti].subtasks=[];
-  data.plans[pi].tasks[ti].subtasks.push({text,done:false,assignedTo:getCurrentUser().id,dueDate:null});
+  const assignee = getCurrentUser().id;
+  data.plans[pi].tasks[ti].subtasks.push({text,done:false,assignedTo:assignee,dueDate:null});
   save(); expandedPlans[pi]=true; render();
+  notifyTelegram(assignee, `Új alfeladat: "${text}"`);
 }
 function editSubtask(pi, ti, si) {
   const s = data.plans[pi].tasks[ti].subtasks[si];
@@ -993,7 +997,7 @@ function editSubtask(pi, ti, si) {
     data.plans[pi].tasks[ti].subtasks[si].assignedTo = newAssignee;
     data.plans[pi].tasks[ti].subtasks[si].dueDate = document.getElementById('f-sdue').value || null;
     save(); render();
-    if (newAssignee && newAssignee !== prevAssignee && newAssignee !== getCurrentUser().id) {
+    if (newAssignee && newAssignee !== prevAssignee) {
       notifyTelegram(newAssignee, `Új alfeladat lett hozzárendelve: "${text}"`);
     }
   });
@@ -1019,7 +1023,7 @@ function addPlan() {
     const assignee = document.getElementById('f-puser').value || null;
     data.plans.push({title, category:g('f-pcat'), description:g('f-pdesc'), assignedTo: assignee, tasks:[], done:false});
     save(); expandedPlans[data.plans.length-1]=true; render();
-    if (assignee && assignee !== getCurrentUser().id) {
+    if (assignee) {
       notifyTelegram(assignee, `Új terv lett hozzárendelve: "${title}"`);
     }
   });
@@ -1038,7 +1042,7 @@ function editPlan(pi) {
     data.plans[pi].title=title; data.plans[pi].category=g('f-pcat'); data.plans[pi].description=g('f-pdesc');
     data.plans[pi].assignedTo = newAssignee;
     save(); render();
-    if (newAssignee && newAssignee !== prevAssignee && newAssignee !== getCurrentUser().id) {
+    if (newAssignee && newAssignee !== prevAssignee) {
       notifyTelegram(newAssignee, `Terv lett hozzárendelve: "${title}"`);
     }
   });

@@ -149,6 +149,24 @@ button { cursor: pointer; font-family: inherit; }
 .badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 500; }
 .badge-blue { background: var(--accent-bg); color: var(--accent-text); }
 .badge-green { background: var(--success-bg); color: var(--success); }
+.badge-orange { background: #fef3c7; color: #92400e; }
+.badge-red { background: var(--danger-bg); color: var(--danger); }
+.badge-gray { background: var(--surface-2); color: var(--text-muted); }
+
+/* Incoming jobs */
+.nav-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--danger); color: #fff; font-size: 10px; font-weight: 600; margin-left: auto; }
+.job-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; cursor: pointer; }
+.job-card:hover { background: var(--surface-2); }
+.job-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.job-card-name { font-size: 15px; font-weight: 500; }
+.job-card-meta { font-size: 13px; color: var(--text-muted); margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; }
+.job-filter { display: flex; gap: 6px; margin-bottom: 0.75rem; flex-wrap: wrap; }
+.job-filter button { padding: 5px 12px; border: 0.5px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; font-family: inherit; }
+.job-filter button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.job-detail-row { display: flex; justify-content: space-between; gap: 12px; padding: 0.5rem 0; border-bottom: 0.5px solid var(--border); font-size: 14px; }
+.job-detail-row:last-child { border-bottom: none; }
+.job-detail-label { color: var(--text-muted); flex-shrink: 0; }
+.job-detail-value { text-align: right; }
 
 /* Company info */
 .info-grid { display: grid; grid-template-columns: 1fr; gap: 0.875rem; }
@@ -288,6 +306,8 @@ textarea.form-input { min-height: 80px; resize: vertical; }
   <span class="nav-section">Áttekintés</span>
   <button class="nav-item active" onclick="showPage('dashboard',this)"><i class="ti ti-layout-dashboard"></i> Irányítópult</button>
   <button class="nav-item" onclick="showPage('company',this)"><i class="ti ti-info-circle"></i> Céginformáció</button>
+  <span class="nav-section">Ügyfelek</span>
+  <button class="nav-item" onclick="showPage('jobs',this)" id="nav-jobs"><i class="ti ti-inbox"></i> Beérkező munkák <span class="nav-badge hidden" id="nav-jobs-badge"></span></button>
   <span class="nav-section">Tervezés</span>
   <button class="nav-item" onclick="showPage('plans',this)"><i class="ti ti-list-check"></i> Tervek és feladatok</button>
   <button class="nav-item" onclick="showPage('notes',this)"><i class="ti ti-notes"></i> Jegyzetek</button>
@@ -314,6 +334,10 @@ textarea.form-input { min-height: 80px; resize: vertical; }
   </button>
   <button class="bottom-nav-item" id="bnav-company" onclick="showPage('company',this,'company')">
     <i class="ti ti-info-circle"></i><span>Cég</span>
+  </button>
+  <button class="bottom-nav-item" id="bnav-jobs" onclick="showPage('jobs',this,'jobs')" style="position:relative">
+    <i class="ti ti-inbox"></i><span>Munkák</span>
+    <span class="nav-badge hidden" id="bnav-jobs-badge" style="position:absolute;top:2px;right:calc(50% - 20px)"></span>
   </button>
   <button class="bottom-nav-item" id="bnav-plans" onclick="showPage('plans',this,'plans')">
     <i class="ti ti-list-check"></i><span>Tervek</span>
@@ -413,6 +437,8 @@ async function loadData() {
   }
   render();
   startRealtimeSync();
+  loadIncomingJobs();
+  startJobsRealtimeSync();
 }
 
 const SUPABASE_FN_URL = SUPABASE_URL + '/functions/v1/notify-telegram';
@@ -565,6 +591,138 @@ function startRealtimeSync() {
     .subscribe();
 }
 
+/* ── Incoming jobs (leads from the public intake form) ── */
+let incomingJobs = [];
+let jobsFilter = 'új';
+const JOB_STATUSES = ['új','kapcsolatba lépve','elfogadva','elutasítva'];
+const JOB_STATUS_BADGE = { 'új':'badge-orange', 'kapcsolatba lépve':'badge-blue', 'elfogadva':'badge-green', 'elutasítva':'badge-red' };
+const PROPERTY_TYPE_LABELS = { lakas:'Lakás', haz:'Ház', iroda:'Iroda', egyeb:'Egyéb' };
+const SERVICE_TYPE_LABELS = { nagytakaritas:'Alkalmi nagytakarítás', rendszeres:'Rendszeres takarítás', koltozes:'Költözés utáni/előtti', epites_utani:'Építés utáni', ablaktisztitas:'Ablaktisztítás', iroda:'Irodatakarítás', egyeb:'Egyéb' };
+const FREQUENCY_LABELS = { egyszeri:'Egyszeri', heti:'Heti', ketheti:'Kétheti', havi:'Havi' };
+
+async function loadIncomingJobs() {
+  const { data: rows } = await sb.from('incoming_jobs').select('*').order('created_at', { ascending:false });
+  incomingJobs = rows || [];
+  renderJobsBadge();
+  if (currentPage === 'jobs') render();
+}
+function renderJobsBadge() {
+  const count = incomingJobs.filter(j => j.status === 'új').length;
+  [document.getElementById('nav-jobs-badge'), document.getElementById('bnav-jobs-badge')].forEach(el => {
+    if (!el) return;
+    if (count > 0) { el.textContent = count; el.classList.remove('hidden'); }
+    else el.classList.add('hidden');
+  });
+}
+function fmtJobField(labels, key) { return key ? (labels[key] || key) : null; }
+function buildJobMsg(job) {
+  const lines = [`Új beérkező munka: "${job.name || 'Névtelen'}"`];
+  if (job.phone) lines.push(`Telefon: ${job.phone}`);
+  if (job.email) lines.push(`Email: ${job.email}`);
+  if (job.address) lines.push(`Cím: ${job.address}`);
+  const pt = fmtJobField(PROPERTY_TYPE_LABELS, job.property_type); if (pt) lines.push(`Ingatlan: ${pt}${job.area_m2 ? ` (${job.area_m2} m²)` : ''}`);
+  const st = fmtJobField(SERVICE_TYPE_LABELS, job.service_type); if (st) lines.push(`Szolgáltatás: ${st}`);
+  const fr = fmtJobField(FREQUENCY_LABELS, job.frequency); if (fr) lines.push(`Gyakoriság: ${fr}`);
+  if (job.preferred_date) lines.push(`Kívánt időpont: ${job.preferred_date}`);
+  if (job.source) lines.push(`Forrás: ${job.source}`);
+  if (job.message) { lines.push(''); lines.push(job.message.trim().slice(0,400)); }
+  return lines.join('\n');
+}
+function startJobsRealtimeSync() {
+  sb.channel('realtime:incoming_jobs')
+    .on('postgres_changes', { event:'*', schema:'public', table:'incoming_jobs' }, payload => {
+      if (payload.eventType === 'INSERT') {
+        const msg = buildJobMsg(payload.new);
+        USERS.forEach(u => notifyTelegram(u.id, msg));
+      }
+      loadIncomingJobs();
+    })
+    .subscribe();
+}
+function setJobsFilter(f) { jobsFilter = f; render(); }
+function renderJobs() {
+  const counts = {};
+  JOB_STATUSES.forEach(s => counts[s] = incomingJobs.filter(j => j.status === s).length);
+  const filtered = jobsFilter === 'all' ? incomingJobs : incomingJobs.filter(j => j.status === jobsFilter);
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Beérkező munkák</div><div class="page-subtitle">Az érdeklődési űrlapon beérkezett megkeresések</div></div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Új</div><div class="stat-value" style="color:#92400e">${counts['új']}</div></div>
+    <div class="stat-card"><div class="stat-label">Kapcsolatba lépve</div><div class="stat-value" style="color:var(--accent)">${counts['kapcsolatba lépve']}</div></div>
+    <div class="stat-card"><div class="stat-label">Elfogadva</div><div class="stat-value" style="color:var(--success)">${counts['elfogadva']}</div></div>
+    <div class="stat-card"><div class="stat-label">Elutasítva</div><div class="stat-value" style="color:var(--danger)">${counts['elutasítva']}</div></div>
+  </div>
+  <div class="job-filter">
+    <button class="${jobsFilter==='all'?'active':''}" onclick="setJobsFilter('all')">Mind (${incomingJobs.length})</button>
+    ${JOB_STATUSES.map(s => `<button class="${jobsFilter===s?'active':''}" onclick="setJobsFilter('${s}')">${s.charAt(0).toUpperCase()+s.slice(1)} (${counts[s]})</button>`).join('')}
+  </div>
+  <div style="display:grid;gap:0.75rem">
+    ${filtered.length === 0
+      ? `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Nincs ide tartozó megkeresés.</div>`
+      : filtered.map(j => renderJobCard(j)).join('')}
+  </div>`;
+}
+function renderJobCard(j) {
+  const assignee = j.assigned_to ? getUserById(j.assigned_to) : null;
+  const pt = fmtJobField(PROPERTY_TYPE_LABELS, j.property_type);
+  const st = fmtJobField(SERVICE_TYPE_LABELS, j.service_type);
+  const created = fmtTgDate(j.created_at) || '';
+  return `<div class="job-card" onclick="openJobDetail('${j.id}')">
+    <div class="job-card-top">
+      <div>
+        <div class="job-card-name">${escapeHtml(j.name || 'Névtelen')}</div>
+        <div class="job-card-meta">
+          ${j.phone ? `<span><i class="ti ti-phone" style="font-size:12px"></i> ${escapeHtml(j.phone)}</span>` : ''}
+          ${st ? `<span><i class="ti ti-spray" style="font-size:12px"></i> ${st}</span>` : ''}
+          ${pt ? `<span><i class="ti ti-home" style="font-size:12px"></i> ${pt}${j.area_m2?` · ${j.area_m2} m²`:''}</span>` : ''}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+        <span class="badge ${JOB_STATUS_BADGE[j.status]||'badge-gray'}">${j.status}</span>
+        ${assignee ? `<span class="user-badge ${assignee.color}"><i class="ti ti-user" style="font-size:10px"></i> ${assignee.name}</span>` : ''}
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:6px">${created}</div>
+  </div>`;
+}
+function openJobDetail(id) {
+  const j = incomingJobs.find(x => x.id === id);
+  if (!j) return;
+  const pt = fmtJobField(PROPERTY_TYPE_LABELS, j.property_type);
+  const st = fmtJobField(SERVICE_TYPE_LABELS, j.service_type);
+  const fr = fmtJobField(FREQUENCY_LABELS, j.frequency);
+  const rows = [
+    ['Telefon', j.phone], ['Email', j.email], ['Cím', j.address],
+    ['Ingatlan típusa', pt], ['Terület', j.area_m2 ? `${j.area_m2} m²` : null],
+    ['Szolgáltatás', st], ['Gyakoriság', fr], ['Kívánt időpont', j.preferred_date],
+    ['Forrás', j.source], ['Beérkezett', fmtTgDate(j.created_at)]
+  ].filter(([,v]) => v);
+  openModal(`${j.name || 'Névtelen'}`, `
+    ${rows.map(([l,v]) => `<div class="job-detail-row"><span class="job-detail-label">${l}</span><span class="job-detail-value">${escapeHtml(String(v))}</span></div>`).join('')}
+    ${j.message ? `<div class="form-group" style="margin-top:0.875rem"><label class="form-label">Üzenet</label><div style="font-size:14px;line-height:1.6;background:var(--surface-2);padding:0.75rem;border-radius:var(--radius);white-space:pre-wrap">${escapeHtml(j.message)}</div></div>` : ''}
+    <div class="form-group" style="margin-top:0.875rem"><label class="form-label">Állapot</label>
+      <select class="form-input" id="job-status">${JOB_STATUSES.map(s => `<option value="${s}" ${j.status===s?'selected':''}>${s}</option>`).join('')}</select>
+    </div>
+    <div class="form-group"><label class="form-label">Hozzárendelve</label><select class="form-input" id="job-assignee">${userSelectOptions(j.assigned_to)}</select></div>
+    <div class="form-group"><label class="form-label">Belső megjegyzés</label><textarea class="form-input" id="job-note" placeholder="Csak belső, az ügyfél nem látja…">${j.internal_note||''}</textarea></div>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;color:var(--danger);margin-top:0.25rem" onclick="deleteJob('${j.id}')"><i class="ti ti-trash"></i> Megkeresés törlése</button>
+  `, async () => {
+    const status = document.getElementById('job-status').value;
+    const assigned_to = document.getElementById('job-assignee').value || null;
+    const internal_note = document.getElementById('job-note').value || null;
+    await sb.from('incoming_jobs').update({ status, assigned_to, internal_note }).eq('id', j.id);
+    await loadIncomingJobs();
+  });
+}
+async function deleteJob(id) {
+  if (!confirm('Biztosan törlöd ezt a megkeresést?')) return;
+  closeModal();
+  await sb.from('incoming_jobs').delete().eq('id', id);
+  await loadIncomingJobs();
+}
+
 let currentPage = 'dashboard';
 let expandedPlans = {};
 let expandedTaskNotes = {};
@@ -574,6 +732,7 @@ let expandedSubtaskNotes = {};
 const pageTitles = {
   dashboard: '<i class="ti ti-layout-dashboard"></i> Irányítópult',
   company:   '<i class="ti ti-info-circle"></i> Céginformáció',
+  jobs:      '<i class="ti ti-inbox"></i> Beérkező munkák',
   plans:     '<i class="ti ti-list-check"></i> Tervek',
   notes:     '<i class="ti ti-notes"></i> Jegyzetek',
   software:  '<i class="ti ti-device-desktop"></i> Szoftverek',
@@ -586,7 +745,7 @@ function showPage(page, el, bnavId) {
   document.getElementById('top-bar-title').innerHTML = pageTitles[page];
   // Desktop nav
   document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.remove('active'));
-  const keywords = { dashboard:'irányító', company:'céginform', plans:'tervek', notes:'jegyzetek', software:'szoftver', calendar:'naptár', users:'felhasználók' };
+  const keywords = { dashboard:'irányító', company:'céginform', jobs:'beérkező', plans:'tervek', notes:'jegyzetek', software:'szoftver', calendar:'naptár', users:'felhasználók' };
   document.querySelectorAll('.sidebar .nav-item').forEach(n => {
     if (keywords[page] && n.textContent.trim().toLowerCase().includes(keywords[page])) n.classList.add('active');
   });
@@ -602,6 +761,7 @@ function render() {
   const main = document.getElementById('main-content');
   if (currentPage === 'dashboard') main.innerHTML = renderDashboard();
   else if (currentPage === 'company') main.innerHTML = renderCompany();
+  else if (currentPage === 'jobs') main.innerHTML = renderJobs();
   else if (currentPage === 'plans') main.innerHTML = renderPlans();
   else if (currentPage === 'notes') main.innerHTML = renderNotes();
   else if (currentPage === 'software') main.innerHTML = renderSoftware();

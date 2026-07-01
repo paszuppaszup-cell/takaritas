@@ -3,7 +3,35 @@
     "allow": [
       "Bash(gh repo *)",
       "PowerShell(gh repo create takaritas --public --description \"Takaritas projekt\" 2>&1)",
-      "PowerShell(gh auth status 2>&1)"
+      "PowerShell(gh auth status 2>&1)",
+      "PowerShell(gh api repos/paszuppaszup-cell/takaritas/pages --method POST --field source='{\"branch\":\"main\",\"path\":\"/\"}' 2>&1)",
+      "Bash(gh api *)",
+      "Bash(claude mcp *)",
+      "PowerShell(claude mcp add --scope project --transport http supabase \"https://mcp.supabase.com/mcp?project_ref=xausvinlfcdcgkkjjlox\" 2>&1)",
+      "mcp__6e78cb95-dd05-454c-b60e-fe4407f2f032__get_project_url",
+      "mcp__6e78cb95-dd05-454c-b60e-fe4407f2f032__get_publishable_keys",
+      "mcp__6e78cb95-dd05-454c-b60e-fe4407f2f032__apply_migration",
+      "PowerShell($content = curl.exe -s \"https://paszuppaszup-cell.github.io/takaritas/?v=$\\(Get-Random\\)\"; if \\($content -match \"renderSoftware\"\\) { Write-Output \"FOUND renderSoftware\" } else { Write-Output \"NOT FOUND renderSoftware\" }; if \\($content -match \"bnav-software\"\\) { Write-Output \"FOUND bnav-software\" } else { Write-Output \"NOT FOUND bnav-software\" })",
+      "Bash(gh run *)",
+      "Bash(gh workflow *)",
+      "PowerShell($content = curl.exe -s \"https://paszuppaszup-cell.github.io/takaritas/?nocache=$\\(Get-Random\\)\"; if \\($content -match \"renderSoftware\"\\) { Write-Output \"OK: software code is live\" } else { Write-Output \"MISSING\" })",
+      "mcp__6e78cb95-dd05-454c-b60e-fe4407f2f032__execute_sql",
+      "Bash(curl.exe -s \"https://api.telegram.org/bot8835880182:AAEbva08wAxNJTHGHxC0euELmmK_SatifDo/getMe\")",
+      "Bash(curl.exe -s \"https://api.telegram.org/bot8835880182:AAEbva08wAxNJTHGHxC0euELmmK_SatifDo/getUpdates\")",
+      "Bash(curl.exe -s \"https://api.telegram.org/bot8835880182:AAEbva08wAxNJTHGHxC0euELmmK_SatifDo/sendMessage\" -d \"chat_id=8171881940\" -d \"text=Teszt üzenet a Cégvezető appból. A Telegram értesítések működnek!\")",
+      "Bash(curl.exe -s \"https://api.telegram.org/bot8835880182:AAEbva08wAxNJTHGHxC0euELmmK_SatifDo/sendMessage\" -d \"chat_id=8171881940\" -d \"text=Test message from Cegvezeto app. Notifications work!\")",
+      "mcp__6e78cb95-dd05-454c-b60e-fe4407f2f032__deploy_edge_function",
+      "Bash(curl.exe -s -X POST \"https://xausvinlfcdcgkkjjlox.supabase.co/functions/v1/notify-telegram\" -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdXN2aW5sZmNkY2dra2pqbG94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MjUzODgsImV4cCI6MjA5ODQwMTM4OH0.Qgf7X662VSnM-iCw6F3jPyRo4xZmodVT_dTpqITx-PE\" -H \"Content-Type: application/json\" -d \"{\\\\\"user_id\\\\\":\\\\\"user1\\\\\",\\\\\"message\\\\\":\\\\\"Uj feladat erkezett a Cegvezeto appban!\\\\\"}\")",
+      "mcp__6e78cb95-dd05-454c-b60e-fe4407f2f032__get_logs",
+      "Bash(curl.exe -s -X POST \"https://xausvinlfcdcgkkjjlox.supabase.co/functions/v1/notify-telegram\" -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhdXN2aW5sZmNkY2dra2pqbG94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MjUzODgsImV4cCI6MjA5ODQwMTM4OH0.Qgf7X662VSnM-iCw6F3jPyRo4xZmodVT_dTpqITx-PE\" -H \"Content-Type: application/json\" -d \"{\\\\\"user_id\\\\\":\\\\\"user1\\\\\",\\\\\"message\\\\\":\\\\\"Teszt: admin megkapja-e ha user2 valamit ir?\\\\\"}\")",
+      "mcp__6e78cb95-dd05-454c-b60e-fe4407f2f032__list_projects",
+      "mcp__6e78cb95-dd05-454c-b60e-fe4407f2f032__list_tables",
+      "mcp__6e78cb95-dd05-454c-b60e-fe4407f2f032__get_edge_function",
+      "Bash(where npx *)",
+      "Bash(where node *)",
+      "Bash(where python *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

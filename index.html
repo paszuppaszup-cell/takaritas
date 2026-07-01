@@ -996,17 +996,38 @@ function openNoteModal(title, note, cb) {
     });
   });
 }
+function buildNoteMsg(kind, note) {
+  const u = getCurrentUser();
+  const lines = [];
+  lines.push(kind === 'new' ? `Új jegyzet: "${note.title||'Cím nélkül'}"` : `Jegyzet módosítva: "${note.title||'Cím nélkül'}"`);
+  const lbl = noteLinkLabel(note.link);
+  if (lbl) lines.push(`Hozzákapcsolva: ${lbl}`);
+  lines.push(`Írta: ${u.name}`);
+  if (note.content && note.content.trim()) {
+    lines.push('');
+    lines.push(note.content.trim().slice(0, 500));
+  }
+  return lines.join('\n');
+}
 function addNote() {
   openNoteModal('Új jegyzet', { title:'', content:'', link:null }, note => {
     if (!Array.isArray(data.notes)) data.notes = [];
     data.notes.push({ id: Date.now().toString(), ...note });
     save(); render();
+    if ((note.title && note.title.trim()) || (note.content && note.content.trim())) {
+      notifyTelegram(getCurrentUser().id, buildNoteMsg('new', note));
+    }
   });
 }
 function editNote(i) {
+  const before = { ...data.notes[i] };
   openNoteModal('Jegyzet szerkesztése', data.notes[i], note => {
     data.notes[i] = { ...data.notes[i], ...note };
     save(); render();
+    const changed = (before.title||'') !== (note.title||'') || (before.content||'') !== (note.content||'') || JSON.stringify(before.link||null) !== JSON.stringify(note.link||null);
+    if (changed) {
+      notifyTelegram(getCurrentUser().id, buildNoteMsg('edit', note));
+    }
   });
 }
 function deleteNote(i) {

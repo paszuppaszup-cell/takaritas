@@ -421,6 +421,103 @@ function notifyTelegram(userId, message) {
     body: JSON.stringify({ user_id: userId, message })
   }).catch(() => {});
 }
+function fmtTgDate(d) {
+  if (!d) return null;
+  const dt = new Date(d);
+  if (isNaN(dt)) return null;
+  const pad = n => String(n).padStart(2,'0');
+  const base = `${dt.getFullYear()}.${pad(dt.getMonth()+1)}.${pad(dt.getDate())}`;
+  return String(d).length > 10 ? `${base} ${pad(dt.getHours())}:${pad(dt.getMinutes())}` : base;
+}
+function buildTaskMsg(kind, pi, ti, si) {
+  const p = data.plans[pi];
+  const lines = [];
+  if (kind === 'new-task') {
+    const t = p.tasks[ti];
+    lines.push(`Új feladat: "${t.text}"`);
+    lines.push(`Terv: ${p.title}`);
+    if (p.category) lines.push(`Kategória: ${p.category}`);
+    const dd = fmtTgDate(t.dueDate); if (dd) lines.push(`Határidő: ${dd}`);
+    if (t.note && t.note.trim()) lines.push(`Megjegyzés: ${t.note.trim().slice(0,200)}`);
+  } else if (kind === 'assign-task') {
+    const t = p.tasks[ti];
+    lines.push(`Feladat hozzárendelve: "${t.text}"`);
+    lines.push(`Terv: ${p.title}`);
+    if (p.category) lines.push(`Kategória: ${p.category}`);
+    const dd = fmtTgDate(t.dueDate); if (dd) lines.push(`Határidő: ${dd}`);
+    if (t.note && t.note.trim()) lines.push(`Megjegyzés: ${t.note.trim().slice(0,200)}`);
+  } else if (kind === 'new-sub') {
+    const t = p.tasks[ti], s = t.subtasks[si];
+    lines.push(`Új alfeladat: "${s.text}"`);
+    lines.push(`Terv: ${p.title}`);
+    lines.push(`Feladat: ${t.text}`);
+    const dd = fmtTgDate(s.dueDate); if (dd) lines.push(`Határidő: ${dd}`);
+    if (s.note && s.note.trim()) lines.push(`Megjegyzés: ${s.note.trim().slice(0,200)}`);
+  } else if (kind === 'assign-sub') {
+    const t = p.tasks[ti], s = t.subtasks[si];
+    lines.push(`Alfeladat hozzárendelve: "${s.text}"`);
+    lines.push(`Terv: ${p.title}`);
+    lines.push(`Feladat: ${t.text}`);
+    const dd = fmtTgDate(s.dueDate); if (dd) lines.push(`Határidő: ${dd}`);
+    if (s.note && s.note.trim()) lines.push(`Megjegyzés: ${s.note.trim().slice(0,200)}`);
+  } else if (kind === 'new-plan') {
+    lines.push(`Új terv: "${p.title}"`);
+    if (p.category) lines.push(`Kategória: ${p.category}`);
+    if (p.description) lines.push(`Leírás: ${p.description.slice(0,200)}`);
+  } else if (kind === 'assign-plan') {
+    lines.push(`Terv hozzárendelve: "${p.title}"`);
+    if (p.category) lines.push(`Kategória: ${p.category}`);
+    if (p.description) lines.push(`Leírás: ${p.description.slice(0,200)}`);
+  }
+  return lines.join('\n');
+}
+function notifyNote(kind, pi, ti, si, newVal) {
+  const p = data.plans[pi];
+  const currentUser = getCurrentUser();
+  const noteText = newVal.trim().slice(0, 500);
+  const lines = [];
+  let assignee = null;
+  if (kind === 'plan') {
+    lines.push('Megjegyzés a tervhez:');
+    lines.push(`Terv: ${p.title}`);
+    assignee = p.assignedTo;
+  } else if (kind === 'task') {
+    const t = p.tasks[ti];
+    lines.push('Megjegyzés a feladathoz:');
+    lines.push(`Feladat: "${t.text}"`);
+    lines.push(`Terv: ${p.title}`);
+    assignee = t.assignedTo;
+  } else if (kind === 'sub') {
+    const t = p.tasks[ti], s = t.subtasks[si];
+    lines.push('Megjegyzés az alfeladathoz:');
+    lines.push(`Alfeladat: "${s.text}"`);
+    lines.push(`Feladat: ${t.text}`);
+    lines.push(`Terv: ${p.title}`);
+    assignee = s.assignedTo;
+  }
+  lines.push(`Írta: ${currentUser.name}`);
+  lines.push('');
+  lines.push(noteText);
+  const msg = lines.join('\n');
+  const sent = new Set();
+  if (assignee) { notifyTelegram(assignee, msg); sent.add(assignee); }
+  if (!sent.has(currentUser.id)) notifyTelegram(currentUser.id, msg);
+}
+const noteEditStart = {};
+function onNoteFocus(id) {
+  const el = document.getElementById(id);
+  if (el) noteEditStart[id] = el.value || '';
+}
+function onNoteBlur(id, kind, pi, ti, si) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const orig = noteEditStart[id] ?? '';
+  const now = el.value || '';
+  delete noteEditStart[id];
+  if (orig.trim() === now.trim()) return;
+  if (!now.trim()) return;
+  notifyNote(kind, pi, ti, si, now);
+}
 
 function save() {
   lastLocalChange = Date.now();
@@ -742,7 +839,7 @@ function renderPlanCard(p, pi) {
       </div>
     </div>
     <div class="plan-body ${expanded?'':'collapsed'}">
-      ${planNoteOpen ? `<textarea class="task-note-area" style="min-height:80px;margin-top:0.75rem" id="pn-${pi}" placeholder="Terv megjegyzése…" oninput="updatePlanNote(${pi})">${p.note||''}</textarea>` : ''}
+      ${planNoteOpen ? `<textarea class="task-note-area" style="min-height:80px;margin-top:0.75rem" id="pn-${pi}" placeholder="Terv megjegyzése…" oninput="updatePlanNote(${pi})" onfocus="onNoteFocus('pn-${pi}')" onblur="onNoteBlur('pn-${pi}','plan',${pi})">${p.note||''}</textarea>` : ''}
       <div class="task-list">
         ${p.tasks.map((t,ti) => renderTask(t,pi,ti)).join('')}
       </div>
@@ -778,7 +875,7 @@ function renderTask(t, pi, ti) {
         <input placeholder="Alfeladat…" id="ns-${pi}-${ti}" onkeydown="if(event.key==='Enter')addSubtask(${pi},${ti})">
         <button class="btn-icon" onclick="addSubtask(${pi},${ti})" style="padding:4px;border:0.5px solid var(--border);border-radius:var(--radius)"><i class="ti ti-corner-down-right" style="font-size:14px"></i></button>
       </div>
-      ${noteOpen ? `<textarea class="task-note-area" id="tn-${pi}-${ti}" placeholder="Feladat megjegyzése…" oninput="updateTaskNote(${pi},${ti})">${t.note||''}</textarea>` : ''}
+      ${noteOpen ? `<textarea class="task-note-area" id="tn-${pi}-${ti}" placeholder="Feladat megjegyzése…" oninput="updateTaskNote(${pi},${ti})" onfocus="onNoteFocus('tn-${pi}-${ti}')" onblur="onNoteBlur('tn-${pi}-${ti}','task',${pi},${ti})">${t.note||''}</textarea>` : ''}
     </div>
     <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;align-items:center">
       <button class="btn-icon" onclick="editTask(${pi},${ti})" title="Szerkesztés"><i class="ti ti-edit" style="font-size:15px"></i></button>
@@ -804,7 +901,7 @@ function renderSubtask(s, pi, ti, si) {
         ${assignee ? `<span class="user-badge ${assignee.color}"><i class="ti ti-user" style="font-size:10px"></i> ${assignee.name}</span>` : ''}
         ${dueInfo ? `<span class="due-badge ${dueInfo.cls}"><i class="ti ti-calendar" style="font-size:10px"></i> ${dueInfo.label}</span>` : ''}
       </div>` : ''}
-      ${noteOpen ? `<textarea class="task-note-area" id="sn-${pi}-${ti}-${si}" placeholder="Alfeladat megjegyzése…" oninput="updateSubtaskNote(${pi},${ti},${si})">${s.note||''}</textarea>` : ''}
+      ${noteOpen ? `<textarea class="task-note-area" id="sn-${pi}-${ti}-${si}" placeholder="Alfeladat megjegyzése…" oninput="updateSubtaskNote(${pi},${ti},${si})" onfocus="onNoteFocus('sn-${pi}-${ti}-${si}')" onblur="onNoteBlur('sn-${pi}-${ti}-${si}','sub',${pi},${ti},${si})">${s.note||''}</textarea>` : ''}
     </div>
     <button class="btn-icon" onclick="editSubtask(${pi},${ti},${si})" title="Szerkesztés" style="padding:2px"><i class="ti ti-edit" style="font-size:13px"></i></button>
     <button class="btn-icon" onclick="toggleSubtaskNote(${pi},${ti},${si})" title="Megjegyzés" style="padding:2px;${hasNote?'color:var(--accent)':''}"><i class="ti ti-notes" style="font-size:13px"></i></button>
@@ -932,7 +1029,7 @@ function addTask(pi) {
   const assignee = getCurrentUser().id;
   data.plans[pi].tasks.push({text,done:false,subtasks:[],assignedTo:assignee,dueDate:null});
   save(); expandedPlans[pi]=true; render();
-  notifyTelegram(assignee, `Új feladat: "${text}" (${data.plans[pi].title})`);
+  notifyTelegram(assignee, buildTaskMsg('new-task', pi, data.plans[pi].tasks.length-1));
 }
 function editTask(pi, ti) {
   const t = data.plans[pi].tasks[ti];
@@ -952,7 +1049,7 @@ function editTask(pi, ti) {
     data.plans[pi].tasks[ti].dueDate = document.getElementById('f-tdue').value || null;
     save(); render();
     if (newAssignee && newAssignee !== prevAssignee) {
-      notifyTelegram(newAssignee, `Új feladat lett hozzárendelve: "${text}" (${data.plans[pi].title})`);
+      notifyTelegram(newAssignee, buildTaskMsg('assign-task', pi, ti));
     }
   });
 }
@@ -981,7 +1078,7 @@ function addSubtask(pi,ti) {
   const assignee = getCurrentUser().id;
   data.plans[pi].tasks[ti].subtasks.push({text,done:false,assignedTo:assignee,dueDate:null});
   save(); expandedPlans[pi]=true; render();
-  notifyTelegram(assignee, `Új alfeladat: "${text}"`);
+  notifyTelegram(assignee, buildTaskMsg('new-sub', pi, ti, data.plans[pi].tasks[ti].subtasks.length-1));
 }
 function editSubtask(pi, ti, si) {
   const s = data.plans[pi].tasks[ti].subtasks[si];
@@ -998,7 +1095,7 @@ function editSubtask(pi, ti, si) {
     data.plans[pi].tasks[ti].subtasks[si].dueDate = document.getElementById('f-sdue').value || null;
     save(); render();
     if (newAssignee && newAssignee !== prevAssignee) {
-      notifyTelegram(newAssignee, `Új alfeladat lett hozzárendelve: "${text}"`);
+      notifyTelegram(newAssignee, buildTaskMsg('assign-sub', pi, ti, si));
     }
   });
 }
@@ -1024,7 +1121,7 @@ function addPlan() {
     data.plans.push({title, category:g('f-pcat'), description:g('f-pdesc'), assignedTo: assignee, tasks:[], done:false});
     save(); expandedPlans[data.plans.length-1]=true; render();
     if (assignee) {
-      notifyTelegram(assignee, `Új terv lett hozzárendelve: "${title}"`);
+      notifyTelegram(assignee, buildTaskMsg('new-plan', data.plans.length-1));
     }
   });
 }
@@ -1043,7 +1140,7 @@ function editPlan(pi) {
     data.plans[pi].assignedTo = newAssignee;
     save(); render();
     if (newAssignee && newAssignee !== prevAssignee) {
-      notifyTelegram(newAssignee, `Terv lett hozzárendelve: "${title}"`);
+      notifyTelegram(newAssignee, buildTaskMsg('assign-plan', pi));
     }
   });
 }

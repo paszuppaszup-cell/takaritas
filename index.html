@@ -390,7 +390,8 @@ if (sessionStorage.getItem('auth') !== '1') {
   document.getElementById('login-screen').style.display = 'none';
 }
 
-let data = { company:{ name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' }, plans:[], notes:'', software:[] };
+let data = { company:{ name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' }, plans:[], notes:'', software:[], apikeys:[] };
+let softwareTab = 'programs';
 let saveTimer = null;
 
 async function loadData() {
@@ -402,6 +403,7 @@ async function loadData() {
     if (typeof data.notes === 'string') data.notes = data.notes.trim() ? [{ id:'1', title:'Általános', content: data.notes, link: null }] : [];
     if (!Array.isArray(data.notes)) data.notes = [];
     if (!data.software) data.software = [];
+    if (!data.apikeys) data.apikeys = [];
   }
   render();
   startRealtimeSync();
@@ -426,6 +428,7 @@ function startRealtimeSync() {
       if (typeof data.notes === 'string') data.notes = data.notes.trim() ? [{ id:'1', title:'Általános', content: data.notes, link: null }] : [];
       if (!Array.isArray(data.notes)) data.notes = [];
       if (!data.software) data.software = [];
+      if (!data.apikeys) data.apikeys = [];
       render();
     })
     .subscribe();
@@ -1083,6 +1086,22 @@ function renderCalendarList(items) {
 }
 
 function renderSoftware() {
+  const isApiTab = softwareTab === 'apikeys';
+  const apiAuthed = sessionStorage.getItem('apikey_auth') === '1';
+
+  const tabsHtml = `
+  <div style="display:flex;gap:4px;border-bottom:0.5px solid var(--border);margin-bottom:1.25rem">
+    <button class="btn" style="border-radius:0;background:transparent;padding:0.65rem 1rem;font-weight:500;color:${softwareTab==='programs'?'var(--accent)':'var(--text-muted)'};border-bottom:2px solid ${softwareTab==='programs'?'var(--accent)':'transparent'};margin-bottom:-0.5px" onclick="switchSwTab('programs')">
+      <i class="ti ti-device-desktop"></i> Programok
+    </button>
+    <button class="btn" style="border-radius:0;background:transparent;padding:0.65rem 1rem;font-weight:500;color:${softwareTab==='apikeys'?'var(--accent)':'var(--text-muted)'};border-bottom:2px solid ${softwareTab==='apikeys'?'var(--accent)':'transparent'};margin-bottom:-0.5px" onclick="switchSwTab('apikeys')">
+      <i class="ti ti-key"></i> API kulcsok
+    </button>
+  </div>`;
+
+  if (isApiTab && !apiAuthed) return renderApiLoginPage(tabsHtml);
+  if (isApiTab) return renderApiKeys(tabsHtml);
+
   const sw = data.software || [];
   const havali = sw.filter(s => s.cycle === 'havi');
   const eves = sw.filter(s => s.cycle === 'éves');
@@ -1095,7 +1114,7 @@ function renderSoftware() {
     <div><div class="page-title">Szoftverek & Kiadások</div></div>
     <button class="btn btn-primary btn-sm" onclick="addSoftware()"><i class="ti ti-plus"></i> Hozzáad</button>
   </div>
-
+  ${tabsHtml}
   <div class="stats-grid" style="margin-bottom:1.25rem">
     <div class="stat-card"><div class="stat-label">Havi kiadás</div><div class="stat-value">${havi_total.toLocaleString('hu')} Ft</div></div>
     <div class="stat-card"><div class="stat-label">Éves kiadás</div><div class="stat-value">${eves_total.toLocaleString('hu')} Ft</div></div>
@@ -1177,6 +1196,124 @@ function editSoftware(i) {
 function toggleSoftware(i) { data.software[i].active = !data.software[i].active; save(); render(); }
 function deleteSoftware(i) {
   if (confirm(`Törlöd: "${data.software[i].name}"?`)) { data.software.splice(i,1); save(); render(); }
+}
+function switchSwTab(tab) { softwareTab = tab; render(); }
+
+/* ── API keys (protected sub-page) ── */
+function renderApiLoginPage(tabsHtml) {
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Szoftverek & Kiadások</div></div>
+  </div>
+  ${tabsHtml}
+  <div class="card" style="max-width:400px;margin:2rem auto;text-align:center;padding:2rem 1.5rem">
+    <div style="font-size:36px;color:var(--accent);margin-bottom:0.75rem"><i class="ti ti-lock"></i></div>
+    <div style="font-size:17px;font-weight:500;margin-bottom:4px">Védett terület</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:1.25rem">Az API kulcsok külön jelszóval védettek</div>
+    <input class="login-input" type="password" id="apikey-input" placeholder="••••••••" maxlength="20" onkeydown="if(event.key==='Enter')doApiLogin()">
+    <button class="login-btn" onclick="doApiLogin()">Belépés</button>
+    <div class="login-error" id="apikey-error"></div>
+  </div>`;
+}
+
+async function doApiLogin() {
+  const val = document.getElementById('apikey-input').value;
+  const btn = document.querySelector('#main-content .login-btn');
+  btn.textContent = '...'; btn.disabled = true;
+  const { data: row } = await sb.from('settings').select('value').eq('key','apikey_password').single();
+  btn.textContent = 'Belépés'; btn.disabled = false;
+  if (row && val === row.value) {
+    sessionStorage.setItem('apikey_auth','1');
+    render();
+  } else {
+    const err = document.getElementById('apikey-error');
+    err.textContent = 'Hibás jelszó.';
+    document.getElementById('apikey-input').value = '';
+    document.getElementById('apikey-input').focus();
+    setTimeout(()=>err.textContent='',2500);
+  }
+}
+
+function renderApiKeys(tabsHtml) {
+  const keys = data.apikeys || [];
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Szoftverek & Kiadások</div></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-ghost btn-sm" onclick="sessionStorage.removeItem('apikey_auth');render()"><i class="ti ti-lock"></i> Kilépés</button>
+      <button class="btn btn-primary btn-sm" onclick="addApiKey()"><i class="ti ti-plus"></i> Új kulcs</button>
+    </div>
+  </div>
+  ${tabsHtml}
+  ${keys.length === 0 ? `<div class="card" style="color:var(--text-muted);font-size:14px;text-align:center;padding:2rem">Még nincsenek API kulcsok.</div>` :
+  `<div style="display:grid;gap:0.75rem">${keys.map((k,i) => `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.75rem;margin-bottom:0.5rem">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div style="font-weight:500">${k.service}</div>
+            ${k.env ? `<span class="badge badge-blue">${k.env}</span>` : ''}
+          </div>
+          ${k.note ? `<div style="font-size:13px;color:var(--text-muted);margin-top:2px">${k.note}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:2px;flex-shrink:0">
+          <button class="btn-icon" onclick="editApiKey(${i})"><i class="ti ti-edit" style="font-size:15px"></i></button>
+          <button class="btn-icon" onclick="deleteApiKey(${i})" style="color:var(--danger)"><i class="ti ti-trash" style="font-size:15px"></i></button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;background:var(--surface-2);padding:0.5rem 0.75rem;border-radius:var(--radius);font-family:monospace;font-size:13px">
+        <span style="flex:1;overflow-x:auto;white-space:nowrap" id="key-${i}">${k.visible ? k.key : '•'.repeat(Math.min(32, (k.key||'').length))}</span>
+        <button class="btn-icon" onclick="toggleKeyVisible(${i})" title="${k.visible?'Elrejt':'Mutat'}"><i class="ti ti-${k.visible?'eye-off':'eye'}" style="font-size:15px"></i></button>
+        <button class="btn-icon" onclick="copyKey(${i})" title="Másol"><i class="ti ti-copy" style="font-size:15px"></i></button>
+      </div>
+    </div>`).join('')}</div>`}`;
+}
+
+function apiKeyModal(title, k, cb) {
+  openModal(title, `
+    <div class="form-group"><label class="form-label">Szolgáltatás *</label><input class="form-input" id="ak-service" value="${k.service||''}" placeholder="pl. OpenAI, Stripe, Google Maps"></div>
+    <div class="form-group"><label class="form-label">API kulcs *</label><textarea class="form-input" id="ak-key" style="font-family:monospace;font-size:13px">${k.key||''}</textarea></div>
+    <div class="info-grid" style="gap:0.75rem">
+      <div class="form-group"><label class="form-label">Környezet</label>
+        <select class="form-input" id="ak-env">
+          <option value="" ${!k.env?'selected':''}>—</option>
+          <option value="production" ${k.env==='production'?'selected':''}>Production</option>
+          <option value="test" ${k.env==='test'?'selected':''}>Test</option>
+          <option value="dev" ${k.env==='dev'?'selected':''}>Dev</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Megjegyzés</label><input class="form-input" id="ak-note" value="${k.note||''}" placeholder="pl. Fő fiók, lejárat: 2027"></div>
+  `, cb);
+}
+
+function addApiKey() {
+  apiKeyModal('Új API kulcs', {}, () => {
+    const service = g('ak-service'), key = g('ak-key');
+    if (!service || !key) return alert('A szolgáltatás és a kulcs kötelező!');
+    data.apikeys.push({ service, key, env:g('ak-env'), note:g('ak-note'), visible:false });
+    save(); render();
+  });
+}
+function editApiKey(i) {
+  apiKeyModal('API kulcs szerkesztése', data.apikeys[i], () => {
+    const service = g('ak-service'), key = g('ak-key');
+    if (!service || !key) return alert('A szolgáltatás és a kulcs kötelező!');
+    data.apikeys[i] = { ...data.apikeys[i], service, key, env:g('ak-env'), note:g('ak-note') };
+    save(); render();
+  });
+}
+function deleteApiKey(i) {
+  if (confirm(`Törlöd a "${data.apikeys[i].service}" kulcsot?`)) { data.apikeys.splice(i,1); save(); render(); }
+}
+function toggleKeyVisible(i) { data.apikeys[i].visible = !data.apikeys[i].visible; render(); }
+function copyKey(i) {
+  navigator.clipboard.writeText(data.apikeys[i].key).then(()=>{
+    const el = document.getElementById('key-'+i);
+    const old = el.textContent;
+    el.textContent = '✓ Másolva';
+    setTimeout(()=>render(),1200);
+  });
 }
 
 /* ── Modal ── */

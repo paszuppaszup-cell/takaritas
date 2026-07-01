@@ -1009,13 +1009,30 @@ function buildNoteMsg(kind, note) {
   }
   return lines.join('\n');
 }
+function linkedAssignee(link) {
+  if (!link) return null;
+  try {
+    if (link.type==='plan') return data.plans[link.pi].assignedTo || null;
+    if (link.type==='task') return data.plans[link.pi].tasks[link.ti].assignedTo || null;
+    if (link.type==='sub') return data.plans[link.pi].tasks[link.ti].subtasks[link.si].assignedTo || null;
+  } catch(e) {}
+  return null;
+}
+function sendNoteNotification(kind, note) {
+  const msg = buildNoteMsg(kind, note);
+  const currentUserId = getCurrentUser().id;
+  const sent = new Set();
+  notifyTelegram(currentUserId, msg); sent.add(currentUserId);
+  const linkedUser = linkedAssignee(note.link);
+  if (linkedUser && !sent.has(linkedUser)) notifyTelegram(linkedUser, msg);
+}
 function addNote() {
   openNoteModal('Új jegyzet', { title:'', content:'', link:null }, note => {
     if (!Array.isArray(data.notes)) data.notes = [];
     data.notes.push({ id: Date.now().toString(), ...note });
     save(); render();
     if ((note.title && note.title.trim()) || (note.content && note.content.trim())) {
-      notifyTelegram(getCurrentUser().id, buildNoteMsg('new', note));
+      sendNoteNotification('new', note);
     }
   });
 }
@@ -1026,7 +1043,7 @@ function editNote(i) {
     save(); render();
     const changed = (before.title||'') !== (note.title||'') || (before.content||'') !== (note.content||'') || JSON.stringify(before.link||null) !== JSON.stringify(note.link||null);
     if (changed) {
-      notifyTelegram(getCurrentUser().id, buildNoteMsg('edit', note));
+      sendNoteNotification('edit', note);
     }
   });
 }

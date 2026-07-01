@@ -393,6 +393,7 @@ if (sessionStorage.getItem('auth') !== '1') {
 let data = { company:{ name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' }, plans:[], notes:'', software:[], apikeys:[] };
 let softwareTab = 'programs';
 let saveTimer = null;
+let lastLocalChange = 0;
 
 async function loadData() {
   const { data: rows, error } = await sb.from('app_data').select('data').eq('id','main').single();
@@ -410,11 +411,26 @@ async function loadData() {
 }
 
 function save() {
+  lastLocalChange = Date.now();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     await sb.from('app_data').upsert({ id:'main', data: JSON.parse(JSON.stringify(data)), updated_at: new Date().toISOString() });
   }, 400);
 }
+
+let pendingRemoteRender = false;
+
+function isEditingField() {
+  const el = document.activeElement;
+  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && document.getElementById('main-content').contains(el);
+}
+
+document.addEventListener('focusout', e => {
+  if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && pendingRemoteRender) {
+    pendingRemoteRender = false;
+    render();
+  }
+});
 
 function startRealtimeSync() {
   sb.channel('realtime:app_data')
@@ -422,6 +438,8 @@ function startRealtimeSync() {
       const incoming = payload.new?.data;
       if (!incoming) return;
       if (JSON.stringify(incoming) === JSON.stringify(data)) return;
+      // Ignore echoes of our own very-recent edits so re-render doesn't steal focus mid-typing.
+      if (Date.now() - lastLocalChange < 1200) return;
       data = incoming;
       if (!data.company) data.company = { name:'', type:'', address:'', phone:'', email:'', taxnum:'', founded:'', description:'' };
       if (!data.plans) data.plans = [];
@@ -429,6 +447,7 @@ function startRealtimeSync() {
       if (!Array.isArray(data.notes)) data.notes = [];
       if (!data.software) data.software = [];
       if (!data.apikeys) data.apikeys = [];
+      if (isEditingField()) { pendingRemoteRender = true; return; }
       render();
     })
     .subscribe();
